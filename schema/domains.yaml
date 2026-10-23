@@ -1,119 +1,99 @@
 # 情報領域の語彙 (正典)。
 # 骨格はデジタル庁「自治体標準オープンデータセット」(旧 推奨データセット) の
 # 基本編 14 + 応用編 8。標準に無い領域は standard_dataset: null の拡張として足す。
-# profile: static = 更新頻度が低い / dynamic = 継続的に更新される。
-# publishers_expected: その領域の配信元として想定する主体の種別。
+# profile: static | dynamic | null。null は「未判定」(static の省略形ではない)。
+#   値を持つのは実測に着手した領域 (schedule-events, gomi) だけ。
+# publishers_expected: 値を持つ領域にのみ置く。配信元として想定する主体の種別。
 domains:
   - id: aed
-    name_ja: AED設置箇所
-    standard_dataset: 自治体標準オープンデータセット/基本編/1_AED設置箇所
-    profile: static
-    publishers_expected: [自治体, 消防本部]
+    name_ja: AED設置箇所一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/1_AED設置箇所一覧
+    profile: null
   - id: care-facilities
-    name_ja: 介護サービス事業所
-    standard_dataset: 自治体標準オープンデータセット/基本編/2_介護サービス事業所
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 介護サービス事業所一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/2_介護サービス事業所一覧
+    profile: null
   - id: medical-facilities
-    name_ja: 医療機関
-    standard_dataset: 自治体標準オープンデータセット/基本編/3_医療機関
-    profile: static
-    publishers_expected: [自治体, 保健所]
+    name_ja: 医療機関一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/3_医療機関一覧
+    profile: null
   - id: cultural-properties
-    name_ja: 文化財
-    standard_dataset: 自治体標準オープンデータセット/基本編/4_文化財
-    profile: static
-    publishers_expected: [自治体, 教育委員会]
+    name_ja: 文化財一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/4_文化財一覧
+    profile: null
   - id: tourism-facilities
-    name_ja: 観光施設
-    standard_dataset: 自治体標準オープンデータセット/基本編/5_観光施設
-    profile: static
-    publishers_expected: [自治体, 観光協会]
+    name_ja: 観光施設一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/5_観光施設一覧
+    profile: null
   - id: schedule-events
     name_ja: 予定・催事情報 (イベント一覧・お知らせ・新着)
     standard_dataset: 自治体標準オープンデータセット/基本編/6_イベント一覧
     profile: dynamic
     publishers_expected: [自治体, 観光協会, 図書館, 公民館, 商工会議所]
   - id: public-wifi
-    name_ja: 公衆無線LAN
-    standard_dataset: 自治体標準オープンデータセット/基本編/7_公衆無線LAN
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 公衆無線LANアクセスポイント一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/7_公衆無線LANアクセスポイント一覧
+    profile: null
   - id: public-toilets
-    name_ja: 公衆トイレ
-    standard_dataset: 自治体標準オープンデータセット/基本編/8_公衆トイレ
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 公衆トイレ一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/8_公衆トイレ一覧
+    profile: null
   - id: fire-water-sources
-    name_ja: 消防水利施設
-    standard_dataset: 自治体標準オープンデータセット/基本編/9_消防水利施設
-    profile: static
-    publishers_expected: [自治体, 消防本部]
+    name_ja: 消防水利施設一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/9_消防水利施設一覧
+    profile: null
   - id: evacuation-sites
-    name_ja: 指定緊急避難場所
-    standard_dataset: 自治体標準オープンデータセット/基本編/10_指定緊急避難場所
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 指定緊急避難場所一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/10_指定緊急避難場所一覧
+    profile: null
   - id: population
     name_ja: 地域・年齢別人口
     standard_dataset: 自治体標準オープンデータセット/基本編/11_地域・年齢別人口
-    profile: dynamic
-    publishers_expected: [自治体]
+    profile: null
   - id: public-facilities
-    name_ja: 公共施設
-    standard_dataset: 自治体標準オープンデータセット/基本編/12_公共施設
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 公共施設一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/12_公共施設一覧
+    profile: null
   - id: childcare-facilities
-    name_ja: 子育て施設
-    standard_dataset: 自治体標準オープンデータセット/基本編/13_子育て施設
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 子育て施設一覧
+    standard_dataset: 自治体標準オープンデータセット/基本編/13_子育て施設一覧
+    profile: null
   - id: open-data-catalog
     name_ja: オープンデータ一覧
     standard_dataset: 自治体標準オープンデータセット/基本編/14_オープンデータ一覧
-    profile: dynamic
-    publishers_expected: [自治体]
+    profile: null
   - id: food-business-licenses
-    name_ja: 食品等営業許可
-    standard_dataset: 自治体標準オープンデータセット/応用編/1_食品等営業許可
-    profile: dynamic
-    publishers_expected: [自治体, 保健所]
+    name_ja: 食品等営業許可・届出一覧
+    standard_dataset: 自治体標準オープンデータセット/応用編/A-1_食品等営業許可・届出一覧
+    profile: null
   - id: school-lunch-menus
-    name_ja: 学校給食献立
-    standard_dataset: 自治体標準オープンデータセット/応用編/2_学校給食献立
-    profile: dynamic
-    publishers_expected: [自治体, 教育委員会]
+    name_ja: 学校給食献立情報
+    standard_dataset: 自治体標準オープンデータセット/応用編/A-2_学校給食献立情報
+    profile: null
   - id: school-districts
-    name_ja: 小中学校通学区域
-    standard_dataset: 自治体標準オープンデータセット/応用編/3_小中学校通学区域
-    profile: static
-    publishers_expected: [自治体, 教育委員会]
+    name_ja: 小中学校通学区域情報
+    standard_dataset: 自治体標準オープンデータセット/応用編/A-3_小中学校通学区域情報
+    profile: null
   - id: boring-logs
-    name_ja: ボーリング柱状図
-    standard_dataset: 自治体標準オープンデータセット/応用編/4_ボーリング柱状図
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: ボーリング柱状図等
+    standard_dataset: 自治体標準オープンデータセット/応用編/B-1_ボーリング柱状図等
+    profile: null
   - id: urban-planning-survey
-    name_ja: 都市計画基礎調査
-    standard_dataset: 自治体標準オープンデータセット/応用編/5_都市計画基礎調査
-    profile: static
-    publishers_expected: [自治体]
+    name_ja: 都市計画基礎調査情報
+    standard_dataset: 自治体標準オープンデータセット/応用編/B-2_都市計画基礎調査情報
+    profile: null
   - id: procurement
     name_ja: 調達情報
-    standard_dataset: 自治体標準オープンデータセット/応用編/6_調達情報
-    profile: dynamic
-    publishers_expected: [自治体]
+    standard_dataset: 自治体標準オープンデータセット/応用編/B-3_調達情報
+    profile: null
   - id: bus-gtfs
     name_ja: 標準的なバス情報フォーマット
-    standard_dataset: 自治体標準オープンデータセット/応用編/7_標準的なバス情報フォーマット
-    profile: dynamic
-    publishers_expected: [自治体, 交通事業者]
+    standard_dataset: 自治体標準オープンデータセット/応用編/B-4_標準的なバス情報フォーマット
+    profile: null
   - id: support-programs
     name_ja: 支援制度情報
-    standard_dataset: 自治体標準オープンデータセット/応用編/8_支援制度情報
-    profile: dynamic
-    publishers_expected: [自治体]
+    standard_dataset: 自治体標準オープンデータセット/応用編/B-5_支援制度情報
+    profile: null
   - id: gomi
     name_ja: ごみ・資源物の収集
     standard_dataset: null

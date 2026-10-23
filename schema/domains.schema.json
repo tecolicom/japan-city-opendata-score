@@ -11,23 +11,26 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "name_ja", "standard_dataset", "profile", "publishers_expected"],
+        "required": ["id", "name_ja", "standard_dataset", "profile"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
           "name_ja": { "type": "string", "minLength": 1 },
           "standard_dataset": {
             "type": ["string", "null"],
-            "pattern": "^自治体標準オープンデータセット/(基本編|応用編)/[0-9]+_.+$"
+            "pattern": "^自治体標準オープンデータセット/(基本編/[0-9]+|応用編/[AB]-[0-9]+)_.+$"
           },
-          "profile": { "enum": ["static", "dynamic"] },
+          "profile": { "enum": ["static", "dynamic", null] },
           "publishers_expected": {
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
             "items": { "type": "string", "minLength": 1 }
           }
-        }
+        },
+        "if": { "properties": { "profile": { "type": "null" } } },
+        "then": { "properties": { "publishers_expected": false } },
+        "else": { "required": ["publishers_expected"] }
       }
     }
   }
