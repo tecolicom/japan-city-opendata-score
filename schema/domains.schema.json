@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-public-data-index/main/schema/domains.schema.json",
+  "title": "情報領域の語彙",
+  "type": "object",
+  "required": ["domains"],
+  "additionalProperties": false,
+  "properties": {
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name_ja", "standard_dataset", "profile", "publishers_expected"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+          "name_ja": { "type": "string", "minLength": 1 },
+          "standard_dataset": {
+            "type": ["string", "null"],
+            "pattern": "^自治体標準オープンデータセット/(基本編|応用編)/[0-9]+_.+$"
+          },
+          "profile": { "enum": ["static", "dynamic"] },
+          "publishers_expected": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}
