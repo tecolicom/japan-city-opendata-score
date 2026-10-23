@@ -1,0 +1,25 @@
+# テスト用の最小レジストリ (3 件)。本物は city-tecoli-data/municipalities/municipalities.yaml
+- code: "11100"
+  handle: saitama
+  name_ja: さいたま市
+  yomi: "さいたまし"
+  type: city
+  lat: 35.861
+  lng: 139.645
+  website: https://www.city.saitama.lg.jp/
+- code: "11217"
+  handle: hanno
+  name_ja: 飯能市
+  yomi: "はんのうし"
+  type: city
+  lat: 35.856
+  lng: 139.328
+  website: https://www.city.hanno.lg.jp/
+- code: "11326"
+  handle: moroyama-town
+  name_ja: 毛呂山町
+  yomi: "もろやままち"
+  type: town
+  lat: 35.941
+  lng: 139.314
+  website: null

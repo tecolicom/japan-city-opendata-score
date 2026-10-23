@@ -1,0 +1,25 @@
+{
+  "name": "japan-public-data-index",
+  "version": "0.1.0",
+  "description": "日本の自治体が web で発信する情報が「実際に使えるか」を実測評価する知識ベース",
+  "license": "CC-BY-4.0",
+  "private": false,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "test": "node scripts/validate.mjs && eslint scripts && node --test scripts/_lib/lib.test.mjs",
+    "lint": "eslint scripts",
+    "score": "node scripts/score.mjs",
+    "fingerprint": "node scripts/fingerprint.mjs",
+    "new": "node scripts/new-municipality.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "eslint": "^10.8.1",
+    "yaml": "^2.5.0"
+  }
+}
