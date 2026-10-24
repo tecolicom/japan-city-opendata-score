@@ -12,7 +12,7 @@
 //     (lg.jp では `city.x.lg.jp` → `www.city.x.lg.jp` の形が頻出し、別オリジンになる)
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 // 取得先のログに残る識別子。連絡先 URL (`+https://...`) を必ず含める。
 export const UA_PRODUCT_TOKEN = 'japan-public-data-index';
@@ -126,10 +126,13 @@ function writeJson(path, value) {
 const states = new Map();
 
 function stateFor(cacheDir) {
-  if (!states.has(cacheDir)) {
-    states.set(cacheDir, { queue: Promise.resolve(), robots: new Map(), lastRequestAt: -Infinity });
+  // 絶対パスに正規化する。同じディレクトリを相対/絶対で渡されて状態が 2 本に割れると、
+  // 同時実行が 2 になり間隔も共有されなくなる (= 取得先に 2 倍の負荷がかかる)。
+  const key = resolve(cacheDir);
+  if (!states.has(key)) {
+    states.set(key, { queue: Promise.resolve(), robots: new Map(), lastRequestAt: -Infinity });
   }
-  return states.get(cacheDir);
+  return states.get(key);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

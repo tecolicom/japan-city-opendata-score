@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { politeFetch, robotsAllows, USER_AGENT, MIN_INTERVAL_MS, MAX_REDIRECTS } from './fetch.mjs';
 
 const TOP = 'https://example.invalid/';
@@ -291,4 +291,18 @@ test('リダイレクトの連鎖に上限を設ける', async () => {
   assert.equal(r.body, undefined);
   const pageHits = rec.urls().filter((u) => !u.endsWith('/robots.txt'));
   assert.equal(pageHits.length, MAX_REDIRECTS + 1, JSON.stringify(pageHits));
+});
+
+test('同じ cacheDir を相対/絶対で渡しても礼儀の状態は 1 本 (負荷が倍にならない)', async () => {
+  const abs = freshCache();
+  const rel = relative(process.cwd(), abs);
+  const rec = fetchRecorder();
+  const slp = sleepRecorder();
+  const common = { _fetch: rec.impl, _sleep: slp.sleep, _now: frozenNow };
+  await Promise.all([
+    politeFetch(TOP, { ...common, cacheDir: abs }),
+    politeFetch(OTHER, { ...common, cacheDir: rel }),
+  ]);
+  assert.equal(rec.state.maxInFlight, 1);
+  assert.equal(rec.urls().filter((u) => u === ROBOTS).length, 1);
 });
