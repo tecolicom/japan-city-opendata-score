@@ -15,7 +15,8 @@
     "score": "node scripts/score.mjs",
     "apply-profile": "node scripts/score.mjs --apply-profile",
     "fingerprint": "node scripts/fingerprint.mjs",
-    "new": "node scripts/new-municipality.mjs"
+    "new": "node scripts/new-municipality.mjs",
+    "build:pages": "node scripts/build-pages.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
