@@ -6,6 +6,7 @@
   "type": "object",
   "required": [
     "handle",
+    "url",
     "family_id",
     "family_confidence",
     "signals_seen",
@@ -16,6 +17,37 @@
     "handle": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "url": {
+      "description": "指紋採取に実際に使ったトップページの URL (観測値)。レジストリの website と同じならそのまま、違うなら registry_website と url_note が要る。",
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "registry_website": {
+      "description": "url がレジストリの website と異なるときだけ書く。レジストリが言っていた値 (出典データの古さの記録)。レジストリは手で直さない。",
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "url_note": {
+      "description": "レジストリの website から外れた根拠。推測ではなく観測に基づく代替であること。",
+      "type": "object",
+      "required": [
+        "observed_at",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "family_id": {
       "type": [
@@ -57,6 +89,7 @@
             "enum": [
               "html",
               "header",
+              "asset_fetch",
               "inferred_from_status"
             ]
           }
@@ -96,5 +129,13 @@
         }
       }
     }
-  ]
+  ],
+  "dependentRequired": {
+    "registry_website": [
+      "url_note"
+    ],
+    "url_note": [
+      "registry_website"
+    ]
+  }
 }

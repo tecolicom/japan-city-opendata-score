@@ -58,3 +58,14 @@ export function webSemanticErrors(web, families) {
   if (web.family_confidence !== basis) errors.push(`family_confidence (${web.family_confidence}) が導出値 (${basis}) と違う`);
   return errors;
 }
+
+// web.yaml の url とレジストリの website の整合。レジストリと違う URL を使うなら、レジストリの値と根拠 (url_note) が要る。
+// 逆に、同じなのに registry_website があるのも誤り。URL の比較は正規化 (末尾スラッシュ等) してから行う。
+const norm = (u) => { try { return new URL(u).href; } catch { return u; } };
+export function webUrlErrors(web, registryWebsite) {
+  const same = norm(web.url) === norm(registryWebsite);
+  if (same) return web.registry_website ? ['url がレジストリの website と同じなのに registry_website がある'] : [];
+  if (!web.registry_website) return [`url (${web.url}) がレジストリの website (${registryWebsite}) と違うのに registry_website / url_note が無い`];
+  if (norm(web.registry_website) !== norm(registryWebsite)) return [`registry_website (${web.registry_website}) がレジストリの website (${registryWebsite}) と一致しない`];
+  return [];
+}

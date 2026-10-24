@@ -231,7 +231,7 @@ const runValidate = (files) => {
   return { code: r.status, out: r.stderr + r.stdout };
 };
 const good = {
-  'municipalities/saitama/hanno/web.yaml': 'handle: hanno\nfamily_id: fam-feedphp-sitenew\nfamily_confidence: observed\nsignals_seen:\n  - {signal: /index.update.json, method: html}\n  - {signal: /news_list.html, method: html}\nfingerprinted_at: 2026-10-23\n',
+  'municipalities/saitama/hanno/web.yaml': 'handle: hanno\nurl: https://www.city.hanno.lg.jp/\nfamily_id: fam-feedphp-sitenew\nfamily_confidence: observed\nsignals_seen:\n  - {signal: /index.update.json, method: html}\n  - {signal: /news_list.html, method: html}\nfingerprinted_at: 2026-10-23\n',
   'municipalities/saitama/hanno/assessments/schedule-events.yaml': `domain: schedule-events
 surveyed_at: 2026-10-23
 publishers:

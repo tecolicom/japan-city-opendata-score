@@ -36,7 +36,7 @@ measured_representatives:
       - signal: /index.update.json
         method: html
       - signal: /resource/js/foot_print.js
-        method: html
+        method: asset_fetch   # トップ HTML には現れない。JS を直接取得して確認
   - handle: iruma
     observed_at: "2026-10-23"
     evidence: "トップページ HTML の実地取得"

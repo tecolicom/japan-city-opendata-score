@@ -101,8 +101,18 @@ async function main() {
   for (const r of targets) {
     const url = siteUrlOf(r);
     if (!url) { run.push({ handle: r.handle, status: 'no-verified-url' }); console.log(`${r.handle}\tno-verified-url`); continue; }
-    const res = await politeFetch(url, { cacheDir, _fetch: loggedFetch });
-    const entry = { handle: r.handle, url, status: res.status, httpStatus: res.httpStatus, fromCache: res.fromCache, finalUrl: res.url, redirects: res.redirects ?? [], reason: res.reason, cause: res.cause };
+    let usedUrl = url;
+    let res = await politeFetch(url, { cacheDir, _fetch: loggedFetch });
+    // レジストリの website が 404/410 で、パスを持つなら、サイトのルートを 1 回だけ試す
+    // (出典データの古い URL への観測に基づく代替。URL を推測で組み立てるのではない)。
+    let fellBack = null;
+    const u = new URL(url);
+    if (res.status === 'http-error' && [404, 410].includes(res.httpStatus) && u.pathname !== '/') {
+      fellBack = `${url} は HTTP ${res.httpStatus}`;
+      usedUrl = `${u.origin}/`;
+      res = await politeFetch(usedUrl, { cacheDir, _fetch: loggedFetch });
+    }
+    const entry = { handle: r.handle, url: usedUrl, registryUrl: url, status: res.status, httpStatus: res.httpStatus, fromCache: res.fromCache, finalUrl: res.url, redirects: res.redirects ?? [], reason: res.reason, cause: res.cause };
     if (res.status === 'ok') {
       const { signals, familyId } = fingerprint(res.body, res.headers, { families });
       const family = families.find((f) => f.id === familyId);
@@ -110,6 +120,11 @@ async function main() {
       const signals_seen = inFamily.map((signal) => ({ signal, method: res.body.includes(signal) ? 'html' : 'header' }));
       const web = {
         handle: r.handle,
+        url: usedUrl,
+        ...(new URL(usedUrl).href === new URL(url).href ? {} : {
+          registry_website: url,
+          url_note: { observed_at: today, reason: `レジストリの website (${fellBack}) だったため、ルート ${usedUrl} を取得したところ HTTP ${res.httpStatus} だった。観測に基づく代替` },
+        }),
         family_id: familyId,
         family_confidence: family ? thresholdBasis(family, { signals_seen }) : 'none',
         fingerprinted_at: today,
