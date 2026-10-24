@@ -19,6 +19,10 @@ export function familySemanticErrors(family) {
   return errors;
 }
 
+// family が min_signals を書いていないときの閾値 (正典。fingerprint.mjs もここを読む)。
+// 1 本の偶然一致で family を名乗らせたくないので 2 本を既定とする。
+export const DEFAULT_MIN_SIGNALS = 2;
+
 /**
  * 代表実測 1 件が min_signals を満たす根拠の強さ。データから導出する (閾値ロジックは変えない)。
  *   'observed' … 観測だけで閾値を満たす
@@ -26,7 +30,7 @@ export function familySemanticErrors(family) {
  *   'below'    … 推定を含めても足りない
  */
 export function thresholdBasis(family, rep) {
-  const min = Number.isInteger(family.min_signals) && family.min_signals > 0 ? family.min_signals : 2;
+  const min = Number.isInteger(family.min_signals) && family.min_signals > 0 ? family.min_signals : DEFAULT_MIN_SIGNALS;
   const all = rep.signals_seen.length;
   const observed = rep.signals_seen.filter(isObserved).length;
   if (observed >= min) return 'observed';

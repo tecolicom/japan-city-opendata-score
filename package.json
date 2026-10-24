@@ -13,6 +13,7 @@
     "test": "node scripts/validate.mjs && eslint scripts && node --test scripts/_lib/lib.test.mjs scripts/_lib/fetch.test.mjs scripts/__tests__/domains.test.mjs scripts/__tests__/families.test.mjs scripts/__tests__/fingerprint.test.mjs scripts/__tests__/assessment.test.mjs scripts/__tests__/web-url.test.mjs scripts/__tests__/score.test.mjs",
     "lint": "eslint scripts",
     "score": "node scripts/score.mjs",
+    "apply-profile": "node scripts/score.mjs --apply-profile",
     "fingerprint": "node scripts/fingerprint.mjs",
     "new": "node scripts/new-municipality.mjs"
   },

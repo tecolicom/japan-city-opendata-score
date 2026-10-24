@@ -141,7 +141,7 @@ A 軸と F 軸の値は測定地点に依存する (国外 IP からだけ 403 �
 | プロファイル | 追加軸 | 段階表の所在 |
 |---|---|---|
 | 静的領域 | なし (コア 5 軸のみ) | `japan-gomi-data/docs/opendata-quality-index.md` |
-| 動的領域 | F 更新検知性 / G 継続性 | 未確定 (§7) |
+| 動的領域 | F 更新検知性 / G 継続性 (代理指標版 `g_proxy`) | `schema/profiles/dynamic.yaml` (§7) |
 
 - **静的領域プロファイルの段階表は `japan-gomi-data/docs/opendata-quality-index.md` を参照する。** 現状のまま残し、本書のコアを参照する側とする。**ごみ側の再採点は行わない。** 既存スコアは定義を変えずに本体系に取り込まれる。
 - 段階表の実装が 2 repo に分かれるとドリフトするため、`score.mjs` はコア部分の算出のみを担い、段階表はプロファイル定義から読む。
@@ -156,15 +156,65 @@ A 軸と F 軸の値は測定地点に依存する (国外 IP からだけ 403 �
 | F | 更新検知性 | Timeliness (Zaveri) ↔ Currentness (ISO) | 更新を安く確実に検知できるか。条件付き GET (ETag / Last-Modified)、フィードの有無、更新日時の明示 |
 | G | 継続性 | Availability の時間軸 + Recoverability | 時間を通じて取り続けられるか。恒久 URL か、形式変更の予告、既知の障害 |
 
-**F / G の段階表 (何点が何を意味するか) は本書では決めない。** ごみの 5 軸が実測 129 件から段差を決めたのと同じく、最初の領域を 20〜30 自治体実測した後に **最初の領域の実測後に確定する**。先に数字を決めると実態を映さない。
+**F / G の段階表の正典は `schema/profiles/dynamic.yaml`** (版 `revision`、現行 `2026-10-24.1`)。点数の正典は段階表で、本書は決め方と、何が実測の裏付けを持ち何が持たないかを書く (点数の写しは段階表を変えたとき追従させる)。尺度は F / G とも 0〜10 で、コア 100 点には足さない (§8)。
 
-**G の初回定義 (代理指標)**: G は本来「観測期間中の可用性」で、1 回の訪問では測れない。時系列観測 (観測窓・履歴・差分検知) は監視手法の層 (本スライスの範囲外。別途設計する) の仕事なので、初回は単発訪問で取れる代理指標だけで定義し、**`g_proxy`** という別名で持つ。代理指標は次の 3 つ:
+### 7.1 段階表は実測の分布から決めた — ただし実測は低い段に届かなかった
+
+埼玉 30 自治体の実測 (`docs/measurements/saitama-2026-10-24.md`) と、assessment に記録した 16 配信元の facts (`node scripts/score.mjs --pref saitama --distribution`) を見て決めた。
+
+| 事実 | 観測された分布 | 観測が無かったもの |
+|---|---|---|
+| 条件付き GET (トップページ。30 自治体) | 両方 19 / Last-Modified のみ 11 | **ETag のみ 0 / なし 0** |
+| 条件付き GET (assessment の 16 配信元) | 両方 9 / Last-Modified のみ 7 | 同上 |
+| フィードの HTTP ステータス | 502 が 4 件 (ページ上のリンクで確認できたのは hanno / iruma の 2 件。fukaya / gyoda は family の URL パターンから組み立てた 1 回きりの確認) | 200 の観測 0 件 |
+| `stable_url` / `feed_format` / `edition_label` / `license_text` / `standard_od` | **0 件 (未観測)** | すべて |
+
+**実測だけでは F の低い段も G の大半も埋まらない。** 観測が届いた段と、設計判断で置いた段を、段階表の各段の `basis` で区別する。
+
+- `basis: observed` … 実データの facts がその段に当たっている。
+- `basis: design` … 設計判断で置いた未検証の段。観測が 1 件も無い。
+
+`basis` は実データと突き合わせる (`scripts/__tests__/score.test.mjs`)。observed の段に実データが 1 件も当たらない、または design の段に実データが当たっていれば、`npm test` が落ちる。**観測が付いた時に、design を observed に直す作業が強制される。** 測っていない値を測った値のように見せないという本 repo の原則を、段階表自体にも適用している。
+
+### 7.2 F (更新検知性) の段階
+
+観測の地点で由来が変わる。`conditional_get_scope` (facts) が観測地点を持つ。
+
+- `scope=source` (配信元の URL そのもので観測): 両方 10 / ETag のみ・Last-Modified のみ 6 / なし 0。**この scope の実データはまだ無く、全段 design。**
+- `scope=site-top` (自治体サイトのトップページで観測。現在の 16 配信元すべて): 点数は同じで、由来は **`estimated`** (同じサイト基盤なので配信元も同様と推定。配信元そのもので条件付き GET を確認していない)。`notes` に根拠を書く。
+  - both (10) と last-modified (6) は observed。etag (6) と none (0) は design。
+
+「両方」と「Last-Modified のみ」の点差 (10 対 6) 自体が設計判断。実測が示したのは、この 2 つが現実に分かれて存在すること (19 対 11) だけで、差の大きさは示していない。ETag のみと Last-Modified のみに優劣を付ける根拠は実測に無いので同点にした。
+
+**帰結: 現時点の F は全 16 行が `estimated` なので、`measured` のみを数える集計では F の母数は 0。** 配信元そのもので条件付き GET を測った行が出て初めて `measured` が現れる。
+
+フィードの有無・更新日時の明示は、記録する facts が無い (フィードは 502 で観測できなかった) ので、段を置かなかった。観測できる事実が出てから足す。
+
+### 7.3 G の段階 — `g_proxy` (代理指標版)
+
+G は本来「観測期間中の可用性」で、1 回の訪問では測れない。時系列観測 (観測窓・履歴・差分検知) は監視手法の層 (本スライスの範囲外。別途設計する) の仕事なので、初回は単発訪問で取れる代理指標だけで定義し、**`g_proxy`** という別名で持つ。代理指標は次の 3 つ:
 
 - 恒久 URL か (クエリパラメータ依存・年度別パス・セッション依存の有無)
 - 形式変更の予告の有無 (版表記、`edition` の明示)
 - 既知の障害 (実地で観測した停止事象。family に記録済みのものを参照)
 
-後から時系列版の G を足せる形にしておく。
+後から時系列版の G を足せる形にしておく。以下は実測後に確定した段階。
+
+axes のキーは `G` のままだが、段階表は `axis_aliases: {G: g_proxy}` を宣言し、CSV の列名は `g_proxy` と書く。時系列版の G (監視層) と取り違えないための名前。
+
+- 5xx (ページ上のリンクで確認したフィード) … 0。**observed。** hanno / iruma の 2 行。観測は 1 回で、障害の継続期間は `families/*.yaml` の `known_incidents` が持つ。
+- 5xx (family のパターンから組み立てた URL) … `points: null` (G は unknown)。観測は残すが、そのサイトがその URL で公開しているか未確認なので、その配信元の継続性の根拠にしない。fukaya / gyoda の 2 行。
+- 200 … `points: null` (unknown)。1 回取れたことは継続性の根拠にならない。design。
+- `stable_url: true` 8 / `false` 3 … **design。** `stable_url` は未記録 (URL の形から恒久性は判断できない。時間をおいた再観測が要る)。
+- `edition_label` (版表記) は段に使っていない。観測が 0 件で、有無を facts の等値で表す語彙も無い。
+
+### 7.4 運用
+
+- **`axes` は導出値。** `npm run apply-profile` が facts に段階表を当てて axes・provenance・`derived_at`・`profile`・`profile_revision` を書き戻す (コメントは保つ。同じ版・同じ結果なら何も変えない)。
+- **`profile_revision` の照合。** `validate` が、assessment の `profile_revision` が `schema/profiles/<profile>.yaml` の `revision` と一致すること、保存済みの axes が facts から再導出した結果と一致することを検査する。段階表を変えたら `revision` を上げ、`apply-profile` で当て直す。
+- **static 領域は段階表ファイルを持たない** (§6)。`gomi` など static の行は、axes を書いた行だけが採点でき、キャップも本 repo は持たない。facts だけの static 行は導出できないので失敗する。プロファイル未判定の領域 (`profile: null`) の facts だけの行も失敗する。
+- **キャップの `when` は facts だけを見る。** 軸点や由来を条件にする必要は、現時点の実データに無い (今は不要)。必要になった時に語彙を足す。
+- **`min_signals` の既定**は `scripts/_lib/family-check.mjs` の `DEFAULT_MIN_SIGNALS` (2) が正典で、`fingerprint.mjs` もそれを読む。
 
 ## 8. 総合点を作らない
 

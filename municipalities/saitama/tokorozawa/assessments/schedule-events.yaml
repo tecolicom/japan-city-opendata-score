@@ -10,3 +10,25 @@ publishers:
     observed_at: 2026-10-24
     facts:
       conditional_get: last-modified
+      conditional_get_scope: site-top
+    axes:
+      A: null
+      B: null
+      C: null
+      D: null
+      E: null
+      F: 6
+      G: null
+    provenance:
+      A: unknown
+      B: unknown
+      C: unknown
+      D: unknown
+      E: unknown
+      F: estimated
+      G: unknown
+    derived_at: 2026-10-24
+    profile: dynamic
+    profile_revision: 2026-10-24.1
+    notes: "推定の根拠 — F: Last-Modified のみをトップページで観測 (配信元 URL
+      そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。"

@@ -5,12 +5,13 @@
 // 判定の段差 (何が何点か) はコードに埋め込まない。コードが持つのは、コア共通の配点上限とランク閾値だけ。
 //
 // 必要な入力 (段階表・プロファイル) が無いときは、黙って素通りせず例外で失敗する。
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseDocument } from 'yaml';
 import { loadYaml, listMunicipalityDirs } from './_lib/lib.mjs';
 
-// コア 5 軸の配点 (docs/index.md §2。変えない)。F/G は段階表が未確定なので上限を持たない。
+// コア 5 軸の配点 (docs/index.md §2。変えない)。F/G の尺度は段階表 (schema/profiles/dynamic.yaml) が持ち、コアには足さない。
 export const CORE_MAX = { A: 20, B: 25, C: 20, D: 20, E: 15 };
 export const CORE_AXES = Object.keys(CORE_MAX);
 export const DYNAMIC_AXES = ['F', 'G'];
@@ -41,11 +42,17 @@ export function checkProfile(profile) {
     if (!Array.isArray(steps) || steps.length === 0) throw new TypeError(`applyProfile: 軸 ${k} の段階が無い`);
     for (const s of steps) {
       if (s?.when == null || typeof s.when !== 'object' || Object.keys(s.when).length === 0) throw new TypeError(`applyProfile: 軸 ${k} の段に when が無い`);
-      if (!isNum(s.points) || s.points < 0 || (k in CORE_MAX && s.points > CORE_MAX[k])) {
+      // points: null は『観測はあるがこの軸の根拠にならない』(軸は null + unknown になる)
+      if (s.points !== null && (!isNum(s.points) || s.points < 0 || (k in CORE_MAX && s.points > CORE_MAX[k]))) {
         throw new RangeError(`applyProfile: 軸 ${k} の points (${s.points}) が範囲外 (0〜${CORE_MAX[k] ?? '∞'})`);
       }
+      if (s.basis !== undefined && !['observed', 'design'].includes(s.basis)) throw new TypeError(`applyProfile: 軸 ${k} の basis が不正: ${s.basis}`);
+      if (s.provenance !== undefined && !['measured', 'estimated'].includes(s.provenance)) throw new TypeError(`applyProfile: 軸 ${k} の provenance が不正: ${s.provenance}`);
+      if (DYNAMIC_AXES.includes(k) && s.basis === undefined) throw new TypeError(`applyProfile: 追加軸 ${k} の段には basis (observed か design) が要る (裏付けの有無を隠さない)`);
+      if (s.provenance === 'estimated' && !s.note) throw new TypeError(`applyProfile: 軸 ${k} の estimated の段には note (根拠) が要る`);
     }
   }
+  if (axes.G && profile.axis_aliases?.G !== 'g_proxy') throw new TypeError('applyProfile: G 軸を持つ段階表は axis_aliases.G: g_proxy が要る (単発訪問の代理指標であることを名前に残す)');
   if (profile.caps !== undefined) checkCaps(profile.caps, 'applyProfile');
 }
 
@@ -73,6 +80,7 @@ export function applyProfile(facts, profile) {
   checkProfile(profile);
   const axes = {};
   const provenance = {};
+  const notes = [];
   for (const k of [...CORE_AXES, ...DYNAMIC_AXES]) {
     const steps = profile.axes[k];
     if (!steps) {
@@ -80,7 +88,12 @@ export function applyProfile(facts, profile) {
       continue;
     }
     const hit = steps.find((s) => matches(s.when, facts));
-    if (hit) { axes[k] = hit.points; provenance[k] = 'measured'; continue; }
+    if (hit) {
+      if (hit.points === null) { axes[k] = null; provenance[k] = 'unknown'; continue; }
+      axes[k] = hit.points; provenance[k] = hit.provenance ?? 'measured';
+      if (hit.provenance === 'estimated') notes.push(`${k}: ${hit.note}`);
+      continue;
+    }
     const keys = new Set(steps.flatMap((s) => Object.keys(s.when)));
     if ([...keys].some((key) => key in facts)) {
       throw new Error(`applyProfile: 軸 ${k} は事実 (${[...keys].filter((x) => x in facts).map((x) => `${x}=${facts[x]}`).join(', ')}) が観測されているのに段階表のどの段にも当たらない`);
@@ -88,7 +101,7 @@ export function applyProfile(facts, profile) {
     axes[k] = null;
     provenance[k] = 'unknown';
   }
-  return { axes, provenance, profile_revision: profile.revision, ...(profile.caps ? { caps: profile.caps } : {}) };
+  return { axes, provenance, ...(notes.length > 0 ? { notes } : {}), profile_revision: profile.revision, ...(profile.caps ? { caps: profile.caps } : {}) };
 }
 
 // ---- score ----
@@ -176,38 +189,102 @@ export function aggregate(publishers, options = {}) {
 
 const csvCell = (v) => (v === null || v === undefined ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replaceAll('"', '""')}"` : String(v));
 
+// 領域の profile 名 (schema/domains.yaml)。null は未判定、'static' は段階表を本 repo に持たない (docs/index.md §6)。
+export function domainProfiles(root) {
+  return new Map(loadYaml(join(root, 'schema', 'domains.yaml')).domains.map((d) => [d.id, d.profile ?? null]));
+}
+
+// 領域の profile から、この行に使う段階表を決める。
+//   dynamic など … schema/profiles/<name>.yaml を読む (無ければ loadProfile が失敗する)
+//   static       … 段階表は japan-gomi-data 側が持つ。本 repo は読まず、キャップも持たない。axes が既にある行だけ通し、
+//                  facts から導出する行は失敗する (導出できる段階表が無い)
+//   null (未判定) … axes を書けない領域。facts だけの行は失敗する
+function profileFor(p, domain, domains, profiles, root) {
+  const name = p.profile ?? domains.get(domain) ?? null;
+  if (name === null) {
+    if (p.facts && !p.axes) throw new Error(`${p.id}: 領域 ${domain} はプロファイル未判定なので、facts から axes を導出できない`);
+    return null;
+  }
+  if (name === 'static') {
+    if (p.facts && !p.axes) throw new Error(`${p.id}: static 領域の段階表は japan-gomi-data 側にあり、本 repo では facts から導出できない (axes を書く)`);
+    return null;
+  }
+  if (!profiles.has(name)) profiles.set(name, loadProfile(name, root));
+  return profiles.get(name);
+}
+
 export function collectRows(root) {
   const rows = [];
   const profiles = new Map();
+  const domains = domainProfiles(root);
   for (const { dir } of listMunicipalityDirs(root)) {
     const adir = join(dir, 'assessments');
     if (!existsSync(adir)) continue;
     for (const f of readdirSync(adir).filter((n) => /\.ya?ml$/i.test(n)).sort()) {
       const a = loadYaml(join(adir, f));
       for (const p of a.publishers ?? []) {
+        const profile = profileFor(p, a.domain, domains, profiles, root);
         let row = p;
         if (p.facts && !p.axes) {
-          // 点数がまだ無い行は、段階表を当てて出す。段階表が無ければ loadProfile が失敗する。
-          if (!p.profile) throw new Error(`${p.id}: facts があるのに profile が無く、段階表を選べない`);
-          if (!profiles.has(p.profile)) profiles.set(p.profile, loadProfile(p.profile, root));
-          const r = applyProfile(p.facts, profiles.get(p.profile));
-          row = { ...p, axes: r.axes, provenance: r.provenance };
+          // 点数がまだ無い行は、段階表を当てて出す (保存はしない。保存は --apply-profile)。
+          const r = applyProfile(p.facts, profile);
+          row = { ...p, axes: r.axes, provenance: r.provenance, profile: profile.profile };
         }
-        // axes が既にある行でも、キャップのために profile が分かるなら段階表を読む (無ければ失敗)。
-        let caps;
-        if (p.profile) {
-          if (!profiles.has(p.profile)) profiles.set(p.profile, loadProfile(p.profile, root));
-          caps = profiles.get(p.profile).caps;
-        }
-        rows.push({ id: p.id, domain: a.domain, row, caps });
+        rows.push({ id: p.id, domain: a.domain, row, caps: profile?.caps });
       }
     }
   }
   return rows;
 }
 
+// 段階表の basis と実データの突き合わせ。facts の行 (publishers) を段に当て、
+//   basis: observed の段に当たる行が 0 件 … 観測の裏付けが無いのに有るように見える
+//   basis: design の段に当たる行が 1 件以上 … 観測が付いたのに『未検証』のまま
+// のどちらも誤りとして返す。
+export function profileBasisErrors(profile, publishers) {
+  const errors = [];
+  for (const [k, steps] of Object.entries(profile.axes)) {
+    if (!DYNAMIC_AXES.includes(k)) continue;
+    const hits = steps.map(() => 0);
+    for (const p of publishers) {
+      if (!p.facts) continue;
+      const i = steps.findIndex((s) => matches(s.when, p.facts));
+      if (i >= 0) hits[i] += 1;
+    }
+    steps.forEach((s, i) => {
+      const at = `${profile.profile} 軸 ${k} の段 ${JSON.stringify(s.when)}`;
+      if (s.basis === 'observed' && hits[i] === 0) errors.push(`${at}: basis: observed だが実データが 1 件も当たらない (裏付けが無い)`);
+      if (s.basis === 'design' && hits[i] > 0) errors.push(`${at}: basis: design だが実データが ${hits[i]} 件当たっている (observed に改める)`);
+    });
+  }
+  return errors;
+}
+
+// 保存済みの axes が、いまの段階表を facts に当てた結果と一致するか。
+// axes は導出値なので、段階表を変えたのに再導出していない (版の上げ忘れ・当て直し忘れ) をここで拾う。
+// 段階表が定義する軸だけを比べる (他の軸は人が書いた値かもしれない)。inherited の軸は継承元の値なので比べない。
+export function derivedAxesErrors(p, profile) {
+  if (!p.axes || !p.facts) return [];
+  const errors = [];
+  if (p.profile_revision !== profile.revision) {
+    errors.push(`profile_revision (${p.profile_revision}) が段階表 ${profile.profile} の版 (${profile.revision}) と違う (npm run apply-profile で当て直す)`);
+  }
+  let r;
+  try { r = applyProfile(p.facts, profile); } catch (e) { return [...errors, e.message]; }
+  for (const k of Object.keys(profile.axes)) {
+    if (p.provenance?.[k] === 'inherited') continue;
+    if ((p.axes[k] ?? null) !== r.axes[k] || (p.provenance?.[k] ?? 'unknown') !== r.provenance[k]) {
+      errors.push(`軸 ${k} の保存値 (${p.axes[k] ?? null}/${p.provenance?.[k]}) が段階表を当てた結果 (${r.axes[k]}/${r.provenance[k]}) と違う (npm run apply-profile で当て直す)`);
+    }
+  }
+  return errors;
+}
+
+// 追加軸の列名: G は代理指標版なので g_proxy と書く (時系列版の G と取り違えさせない)。
+const axisLabel = (k) => (k === 'G' ? 'g_proxy' : k);
+
 export function toCsv(rows) {
-  const head = ['publisher_id', 'domain', ...CORE_AXES, 'total', 'rank', ...DYNAMIC_AXES, 'provenance', 'estimated'];
+  const head = ['publisher_id', 'domain', ...CORE_AXES, 'total', 'rank', ...DYNAMIC_AXES.map(axisLabel), 'provenance', 'estimated'];
   const lines = [head.join(',')];
   for (const { id, domain, row, caps } of rows) {
     const s = score(row, { caps });
@@ -218,7 +295,95 @@ export function toCsv(rows) {
   return `${lines.join('\n')}\n`;
 }
 
+// facts の分布 (段階表を書く前に、観測がどの値にどれだけあるかを見る)。
+// 観測が 0 件の値は出ない = 段階表のその段は実測の裏付けを持てない。
+export function distribution(publishers) {
+  const out = {};
+  for (const p of publishers) {
+    for (const [k, v] of Object.entries(p.facts ?? {})) {
+      if (typeof v === 'string' && v.length > 20) continue; // 自由記述は分布にしない
+      out[k] ??= {};
+      out[k][String(v)] = (out[k][String(v)] ?? 0) + 1;
+    }
+  }
+  return { n_total: publishers.length, facts: out };
+}
+
+function prefOf() {
+  const i = process.argv.indexOf('--pref');
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+// ---- --apply-profile: facts → axes を assessment ファイルに書き戻す ----
+
+const NOTE_PREFIX = '推定の根拠 — ';
+const today = () => new Date().toISOString().slice(0, 10);
+
+// 1 ファイルに段階表を当てて書き戻す。コメントと整形は保つ (yaml の Document API)。
+// 対象は『facts があり、領域の profile が段階表を持つ』行だけ。static は触らない。
+// 既に同じ版で同じ結果なら何も変えない (derived_at を無駄に動かさない)。変更した配信元 id の配列を返す。
+export function applyProfileToFile(path, root, { derivedAt = today() } = {}) {
+  const doc = parseDocument(readFileSync(path, 'utf8'));
+  const a = doc.toJS();
+  const domains = domainProfiles(root);
+  const profiles = new Map();
+  const changed = [];
+  (a.publishers ?? []).forEach((p, i) => {
+    if (!p.facts) return;
+    const name = p.profile ?? domains.get(a.domain) ?? null;
+    if (name === null || name === 'static') return;
+    if (!profiles.has(name)) profiles.set(name, loadProfile(name, root));
+    const profile = profiles.get(name);
+    const r = applyProfile(p.facts, profile);
+    const same = p.profile_revision === profile.revision && JSON.stringify(p.axes) === JSON.stringify(r.axes) && JSON.stringify(p.provenance) === JSON.stringify(r.provenance);
+    if (same) return;
+    const at = (k) => ['publishers', i, k];
+    doc.setIn(at('axes'), doc.createNode(r.axes));
+    doc.setIn(at('provenance'), doc.createNode(r.provenance));
+    doc.setIn(at('derived_at'), derivedAt);
+    doc.setIn(at('profile'), profile.profile);
+    doc.setIn(at('profile_revision'), profile.revision);
+    const gen = r.notes ? `${NOTE_PREFIX}${r.notes.join(' / ')}` : null;
+    if (gen) {
+      if (p.notes && !p.notes.startsWith(NOTE_PREFIX)) throw new Error(`${p.id}: 既存の notes を上書きしない (推定の根拠は手で足す): ${path}`);
+      doc.setIn(at('notes'), gen);
+    } else if (p.notes?.startsWith(NOTE_PREFIX)) doc.deleteIn(at('notes'));
+    changed.push(p.id);
+  });
+  if (changed.length > 0) writeFileSync(path, String(doc));
+  return changed;
+}
+
+function assessmentFiles(root, pref) {
+  const files = [];
+  for (const m of listMunicipalityDirs(root).filter((x) => !pref || x.pref === pref)) {
+    const adir = join(m.dir, 'assessments');
+    if (!existsSync(adir)) continue;
+    for (const f of readdirSync(adir).filter((n) => /\.ya?ml$/i.test(n)).sort()) files.push(join(adir, f));
+  }
+  return files;
+}
+
 function main() {
+  const root0 = join(dirname(fileURLToPath(import.meta.url)), '..');
+  if (process.argv.includes('--apply-profile')) {
+    const pref = prefOf();
+    const files = assessmentFiles(root0, pref);
+    const changed = files.flatMap((f) => applyProfileToFile(f, root0));
+    console.log(`apply-profile: ${files.length} ファイル中 ${changed.length} 配信元の axes を更新${changed.length > 0 ? ` (${changed.join(', ')})` : ' (差分なし)'}`);
+    return;
+  }
+  if (process.argv.includes('--distribution')) {
+    const root = root0;
+    const pref = prefOf();
+    const dirs = listMunicipalityDirs(root).filter((m) => !pref || m.pref === pref);
+    const pubs = assessmentFiles(root, pref).flatMap((f) => loadYaml(f).publishers ?? []);
+    const d = distribution(pubs);
+    console.log(`distribution: ${dirs.length} 自治体 / assessment の配信元 ${d.n_total} 件${pref ? ` (pref=${pref})` : ''}`);
+    for (const [k, vs] of Object.entries(d.facts)) console.log(`  ${k}: ${Object.entries(vs).map(([v, n]) => `${v}=${n}`).join(' / ')} (観測 ${Object.values(vs).reduce((a, b) => a + b, 0)}/${d.n_total})`);
+    for (const k of ['conditional_get', 'feed_format', 'stable_url', 'edition_label', 'license_text', 'standard_od', 'feed_http_status', 'conditional_get_scope', 'feed_url_basis']) if (!(k in d.facts)) console.log(`  ${k}: 観測 0/${d.n_total} (未観測)`);
+    return;
+  }
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   const rows = collectRows(root);
   writeFileSync(join(root, 'docs', 'scores.csv'), toCsv(rows));
@@ -228,7 +393,7 @@ function main() {
   for (const [name, rs] of groups) {
     const agg = aggregate(rs.map((r) => r.row), { caps: rs[0].caps });
     console.log(`[${name}] コア合計: ${agg.n}/${agg.n_total} 行が 5 軸すべて measured (平均 ${agg.total.mean ?? '—'})`);
-    for (const [k, v] of Object.entries(agg.axes)) if (v.n_total > 0) console.log(`  ${k}: measured ${v.n}/${v.n_total} (平均 ${v.mean ?? '—'})`);
+    for (const [k, v] of Object.entries(agg.axes)) if (v.n_total > 0) console.log(`  ${axisLabel(k)}: measured ${v.n}/${v.n_total} (平均 ${v.mean ?? '—'})`);
   }
 }
 

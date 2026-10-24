@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, cpSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, cpSync, symlinkSync, existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyProfile, score, aggregate, loadProfile } from '../score.mjs';
+import { applyProfile, score, aggregate, loadProfile, collectRows, distribution, profileBasisErrors, derivedAxesErrors, applyProfileToFile, toCsv } from '../score.mjs';
 
 // 実物の schema/profiles/dynamic.yaml は Task 10 が作る。ここは形だけの inline fixture で、
 // 点数に意味は無い (段差をコードにもテストにも埋め込まないための検証用)。
@@ -15,7 +15,7 @@ const FIXTURE_PROFILE = {
   revision: 'fx1',
   axes: {
     A: [{ when: { reach: 'ok' }, points: 20 }, { when: { reach: 'blocked' }, points: 5 }],
-    F: [{ when: { conditional_get: 'both' }, points: 20 }, { when: { conditional_get: 'none' }, points: 0 }],
+    F: [{ when: { conditional_get: 'both' }, points: 20, basis: 'observed' }, { when: { conditional_get: 'none' }, points: 0, basis: 'design' }],
   },
 };
 const FULL = { A: 20, B: 25, C: 20, D: 20, E: 15 };
@@ -141,7 +141,7 @@ test('applyProfile は段階表に載っていないコア軸も null + unknown 
 });
 
 test('applyProfile: 段差は profile から読む (同じ事実でも段階表が違えば点が変わる)', () => {
-  const other = { ...FIXTURE_PROFILE, axes: { F: [{ when: { conditional_get: 'both' }, points: 7 }] } };
+  const other = { ...FIXTURE_PROFILE, axes: { F: [{ when: { conditional_get: 'both' }, points: 7, basis: 'design' }] } };
   assert.equal(applyProfile({ conditional_get: 'both' }, other).axes.F, 7);
 });
 
@@ -150,12 +150,12 @@ test('applyProfile: 事実は観測されたが段階表のどの段にも当た
 });
 
 test('applyProfile: 先に当たった段を採る', () => {
-  const p = { profile: 'x', revision: 'r', axes: { F: [{ when: { stable_url: true }, points: 9 }, { when: { stable_url: true }, points: 1 }] } };
+  const p = { profile: 'x', revision: '2026-01-01.1', axes: { F: [{ when: { stable_url: true }, points: 9, basis: 'design' }, { when: { stable_url: true }, points: 1, basis: 'design' }] } };
   assert.equal(applyProfile({ stable_url: true }, p).axes.F, 9);
 });
 
 test('applyProfile: when に配列を書くと any-of', () => {
-  const p = { profile: 'x', revision: 'r', axes: { F: [{ when: { conditional_get: ['etag', 'both'] }, points: 12 }] } };
+  const p = { profile: 'x', revision: '2026-01-01.1', axes: { F: [{ when: { conditional_get: ['etag', 'both'] }, points: 12, basis: 'design' }] } };
   assert.equal(applyProfile({ conditional_get: 'etag' }, p).axes.F, 12);
 });
 
@@ -163,24 +163,24 @@ test('applyProfile は段階表が無い・壊れているとき黙って素通�
   assert.throws(() => applyProfile({ reach: 'ok' }, undefined), /profile/);
   assert.throws(() => applyProfile({ reach: 'ok' }, null), /profile/);
   assert.throws(() => applyProfile({ reach: 'ok' }, {}), /axes/);
-  assert.throws(() => applyProfile({ reach: 'ok' }, { revision: 'r', axes: {} }), /axes/, '空の段階表');
+  assert.throws(() => applyProfile({ reach: 'ok' }, { revision: '2026-01-01.1', axes: {} }), /axes/, '空の段階表');
   assert.throws(() => applyProfile({ reach: 'ok' }, { axes: FIXTURE_PROFILE.axes }), /revision/);
   assert.throws(() => applyProfile(undefined, FIXTURE_PROFILE), /facts/);
 });
 
 test('applyProfile は配点を超える段・未知の軸を持つ段階表を拒む', () => {
-  const over = { profile: 'x', revision: 'r', axes: { A: [{ when: { reach: 'ok' }, points: 21 }] } };
+  const over = { profile: 'x', revision: '2026-01-01.1', axes: { A: [{ when: { reach: 'ok' }, points: 21 }] } };
   assert.throws(() => applyProfile({ reach: 'ok' }, over), /範囲/);
-  const bad = { profile: 'x', revision: 'r', axes: { Z: [{ when: { reach: 'ok' }, points: 1 }] } };
+  const bad = { profile: 'x', revision: '2026-01-01.1', axes: { Z: [{ when: { reach: 'ok' }, points: 1 }] } };
   assert.throws(() => applyProfile({ reach: 'ok' }, bad), /軸/);
-  const nowhen = { profile: 'x', revision: 'r', axes: { F: [{ points: 1 }] } };
+  const nowhen = { profile: 'x', revision: '2026-01-01.1', axes: { F: [{ points: 1 }] } };
   assert.throws(() => applyProfile({}, nowhen), /when/);
 });
 
 test('loadProfile は schema/profiles/<name>.yaml を読み、無ければ失敗する', () => {
   const root = mkdtempSync(join(tmpdir(), 'prof-'));
   mkdirSync(join(root, 'schema', 'profiles'), { recursive: true });
-  writeFileSync(join(root, 'schema', 'profiles', 'fx.yaml'), 'profile: fx\nrevision: r1\naxes:\n  F:\n    - when: {conditional_get: both}\n      points: 3\n');
+  writeFileSync(join(root, 'schema', 'profiles', 'fx.yaml'), 'profile: fx\nrevision: 2026-01-01.1\naxes:\n  F:\n    - when: {conditional_get: both}\n      points: 3\n      basis: design\n');
   const p = loadProfile('fx', root);
   assert.equal(applyProfile({ conditional_get: 'both' }, p).axes.F, 3);
   assert.throws(() => loadProfile('dynamic', root), /見つからない/);
@@ -279,7 +279,7 @@ const runValidate = (profiles) => {
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout, tmp };
 };
-const GOOD = 'profile: dynamic\nrevision: r1\naxes:\n  F:\n    - when: {conditional_get: both}\n      points: 20\ncaps:\n  - when: {partial: true}\n    max: 59\n';
+const GOOD = 'profile: dynamic\nrevision: 2026-01-01.1\naxes:\n  F:\n    - when: {conditional_get: both}\n      points: 20\n      basis: design\ncaps:\n  - when: {partial: true}\n    max: 59\n';
 
 test('validate: schema/profiles/ が無くても空でも通る', () => {
   assert.equal(runValidate({}).code, 0);
@@ -292,7 +292,7 @@ test('validate: schema/profiles/*.yaml は検証され、壊れていれば落�
   assert.equal(ok.code, 0, ok.out);
   assert.match(ok.out, /profiles/, '検証一覧に出る');
   const broken = (body) => runValidate({ 'dynamic.yaml': body });
-  assert.notEqual(broken(GOOD.replace('revision: r1\n', '')).code, 0, 'revision 無し');
+  assert.notEqual(broken(GOOD.replace('revision: 2026-01-01.1\n', '')).code, 0, 'revision 無し');
   assert.notEqual(broken(GOOD.replace('points: 20', 'points: x')).code, 0, 'points が数でない');
   assert.notEqual(broken(GOOD.replace('  F:', '  Z:')).code, 0, '未知の軸');
   assert.notEqual(broken(GOOD.replace('max: 59', 'max: 101')).code, 0, 'caps の範囲外');
@@ -302,4 +302,144 @@ test('validate: schema/profiles/*.yaml は検証され、壊れていれば落�
   assert.notEqual(runValidate({ 'sub/x.yaml': GOOD }).code, 0, '下位ディレクトリは検証されないので落ちる');
   const extra = runValidate({ 'dynamic.yaml': GOOD + 'foo: 1\n' });
   assert.notEqual(extra.code, 0, '知らないキー');
+});
+
+// ---- Task 10: F / G の段階表 (schema/profiles/dynamic.yaml) ----
+const REAL = loadProfile('dynamic', root);
+const realPublishers = () => collectRows(root).map((r) => r.row);
+
+test('実物の dynamic 段階表: 版の形式・G の別名・全段に basis がある', () => {
+  assert.match(REAL.revision, /^\d{4}-\d{2}-\d{2}\.\d+$/);
+  assert.equal(REAL.axis_aliases.G, 'g_proxy', 'G は代理指標版であることを名前に持つ');
+  for (const k of ['F', 'G']) for (const s of REAL.axes[k]) assert.ok(['observed', 'design'].includes(s.basis), `${k} ${JSON.stringify(s.when)}`);
+  for (const k of ['F', 'G']) for (const s of REAL.axes[k]) assert.ok(s.points === null || (s.points >= 0 && s.points <= 10), '尺度は 0〜10');
+});
+
+test('段階表の basis は実データと食い違わない (observed は実測が当たり、design には当たっていない)', () => {
+  assert.deepEqual(profileBasisErrors(REAL, realPublishers()), []);
+  // 実測の分布: 条件付き GET の none は 0 件なので、none の段が observed を名乗ってはならない
+  const none = REAL.axes.F.filter((s) => s.when.conditional_get === 'none');
+  assert.ok(none.length > 0 && none.every((s) => s.basis === 'design'));
+});
+
+test('profileBasisErrors: 実データの無い observed と、実データが当たった design を拾う', () => {
+  const prof = { profile: 'x', axes: { F: [{ when: { conditional_get: 'both' }, points: 1, basis: 'observed' }, { when: { conditional_get: 'none' }, points: 0, basis: 'design' }] } };
+  assert.equal(profileBasisErrors(prof, [{ facts: { conditional_get: 'both' } }]).length, 0, 'both=observed に当たり、none=design に当たらない: 誤りなし');
+  assert.equal(profileBasisErrors(prof, []).length, 1, 'observed に 1 件も当たらない');
+  assert.equal(profileBasisErrors(prof, [{ facts: { conditional_get: 'both' } }, { facts: { conditional_get: 'none' } }]).length, 1, 'design に当たった');
+});
+
+test('実データへの適用: F は site-top 観測なので estimated、G は 5xx のページリンクだけが measured', () => {
+  const rows = collectRows(root).filter((r) => r.domain === 'schedule-events');
+  assert.equal(rows.length, 16);
+  for (const { row } of rows) {
+    assert.equal(row.provenance.F, 'estimated', row.id);
+    assert.ok([6, 10].includes(row.axes.F), row.id);
+    assert.ok(['A', 'B', 'C', 'D', 'E'].every((k) => row.axes[k] === null && row.provenance[k] === 'unknown'), 'コア軸は未調査のまま');
+  }
+  const g = Object.fromEntries(rows.map(({ row }) => [row.id.split('/')[0], [row.axes.G, row.provenance.G]]));
+  assert.deepEqual(g.hanno, [0, 'measured']);
+  assert.deepEqual(g.iruma, [0, 'measured']);
+  assert.deepEqual(g.fukaya, [null, 'unknown'], '組み立てた URL の 502 は G の根拠にしない');
+  assert.deepEqual(g.gyoda, [null, 'unknown']);
+  assert.deepEqual(g.chichibu, [null, 'unknown'], '観測の無い行は unknown (0 ではない)');
+});
+
+test('F が estimated なら measured の集計は母数だけ数え、平均は null (推定を実測として集計しない)', () => {
+  const agg = aggregate(realPublishers().filter((r) => r.axes?.F !== undefined));
+  assert.equal(agg.axes.F.n, 0);
+  assert.equal(agg.axes.F.n_total, 16);
+  assert.equal(agg.axes.F.mean, null);
+  assert.equal(agg.axes.G.n, 2);
+  assert.equal(agg.total.mean, null, 'コア未調査の行からは合計を出さない');
+});
+
+test('保存済みの axes は段階表から再導出した結果と一致し、版も一致する (実データ)', () => {
+  for (const r of collectRows(root).filter((x) => x.domain === 'schedule-events')) assert.deepEqual(derivedAxesErrors(r.row, REAL), [], r.id);
+});
+
+test('derivedAxesErrors: 段階表を変えて当て直さない・版を上げ忘れると拾う', () => {
+  const p = { facts: { conditional_get: 'both', conditional_get_scope: 'source' }, ...applyProfile({ conditional_get: 'both', conditional_get_scope: 'source' }, REAL), profile_revision: REAL.revision };
+  assert.deepEqual(derivedAxesErrors(p, REAL), []);
+  const edited = { ...REAL, axes: { ...REAL.axes, F: REAL.axes.F.map((s) => ({ ...s, points: s.points === 10 ? 9 : s.points })) } };
+  assert.ok(derivedAxesErrors(p, edited).some((e) => /軸 F/.test(e)), '点数が変わったのに当て直していない');
+  assert.ok(derivedAxesErrors(p, { ...REAL, revision: '2099-01-01.1' }).some((e) => /profile_revision/.test(e)), '版が違う');
+});
+
+test('G を持つ段階表は axis_aliases.G: g_proxy が要る / points: null は unknown (0 ではない)', () => {
+  const noAlias = { ...REAL, axis_aliases: undefined };
+  assert.throws(() => applyProfile({ stable_url: true }, noAlias), /g_proxy/);
+  const r = applyProfile({ feed_http_status: 200 }, REAL);
+  assert.equal(r.axes.G, null);
+  assert.equal(r.provenance.G, 'unknown');
+  const noBasis = { profile: 'x', revision: '2026-01-01.1', axes: { F: [{ when: { a: 1 }, points: 1 }] } };
+  assert.throws(() => applyProfile({ a: 1 }, noBasis), /basis/, '追加軸の段は裏付けの有無を書く');
+  const est = { profile: 'x', revision: '2026-01-01.1', axes: { F: [{ when: { a: 1 }, points: 1, basis: 'design', provenance: 'estimated' }] } };
+  assert.throws(() => applyProfile({ a: 1 }, est), /note/, 'estimated の段は根拠が要る');
+});
+
+test('CSV の列名は G を g_proxy と書く (時系列版と取り違えない)', () => {
+  const csv = toCsv(collectRows(root));
+  assert.match(csv.split('\n')[0], /,F,g_proxy,/);
+  assert.ok(!/,G,/.test(csv.split('\n')[0]));
+});
+
+test('distribution: 観測された値だけを数え、未観測は出さない', () => {
+  const d = distribution([{ facts: { conditional_get: 'both' } }, { facts: { conditional_get: 'both', feed_http_status: 502 } }, {}]);
+  assert.equal(d.n_total, 3);
+  assert.deepEqual(d.facts.conditional_get, { both: 2 });
+  assert.equal(d.facts.stable_url, undefined);
+});
+
+// 繰越 (Task 8): static の扱い。段階表は japan-gomi-data 側にあり、本 repo は読まない
+const rootWith = (files) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'jpdi-static-'));
+  cpSync(join(root, 'schema'), join(tmp, 'schema'), { recursive: true });
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(tmp, rel)), { recursive: true });
+    writeFileSync(join(tmp, rel), body);
+  }
+  return tmp;
+};
+const GOMI_PUB = (extra) => `domain: gomi\nsurveyed_at: 2026-10-24\npublishers:\n  - id: hanno/city\n    name_ja: 市\n    entity_type: municipality\n    domain_name: example.jp\n    url: https://example.jp/\n    observed_at: 2026-10-24\n${extra}`;
+const GOMI_AXES = '    axes: {A: 10, B: 10, C: 10, D: 10, E: 10}\n    provenance: {A: measured, B: measured, C: measured, D: measured, E: measured}\n    facts: {stable_url: true}\n    derived_at: 2026-10-24\n    profile: static\n    profile_revision: gomi-1\n';
+
+test('static 領域: 段階表ファイルが無くても axes のある行は採点でき、F/G は出ない', () => {
+  assert.ok(!existsSync(join(root, 'schema', 'profiles', 'static.yaml')), '前提: static の段階表ファイルは置かない');
+  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/gomi.yaml': GOMI_PUB(GOMI_AXES) });
+  const rows = collectRows(tmp);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].caps, undefined, 'static のキャップは japan-gomi-data 側が持つ');
+  assert.equal(score(rows[0].row, { caps: rows[0].caps }).core.total, 50);
+  assert.deepEqual(score(rows[0].row).dynamic, {}, '静的領域に追加軸は無い');
+});
+
+test('static 領域: facts だけの行は導出できないので失敗する (黙って unknown にしない)', () => {
+  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/gomi.yaml': GOMI_PUB('    facts: {stable_url: true}\n') });
+  assert.throws(() => collectRows(tmp), /static/);
+  const aed = rootWith({ 'municipalities/saitama/hanno/assessments/aed.yaml': GOMI_PUB('    facts: {stable_url: true}\n').replace('domain: gomi', 'domain: aed') });
+  assert.throws(() => collectRows(aed), /未判定/);
+});
+
+test('--apply-profile は冪等で、コメントを保ち、既存の notes を上書きしない', () => {
+  const src = '# 先頭コメント\ndomain: schedule-events\nsurveyed_at: 2026-10-24\npublishers:\n  - id: hanno/city\n    name_ja: 市\n    entity_type: municipality\n    domain_name: example.jp\n    url: https://example.jp/\n    observed_at: 2026-10-24\n    facts:\n      conditional_get: last-modified\n      conditional_get_scope: site-top\n';
+  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/schedule-events.yaml': src });
+  cpSync(join(root, 'schema', 'profiles'), join(tmp, 'schema', 'profiles'), { recursive: true });
+  const f = join(tmp, 'municipalities/saitama/hanno/assessments/schedule-events.yaml');
+  assert.deepEqual(applyProfileToFile(f, tmp, { derivedAt: '2026-10-25' }), ['hanno/city']);
+  const once = readFileSync(f, 'utf8');
+  assert.match(once, /^# 先頭コメント/);
+  assert.match(once, /derived_at: 2026-10-25/);
+  assert.match(once, /推定の根拠/);
+  assert.deepEqual(applyProfileToFile(f, tmp, { derivedAt: '2026-11-01' }), [], '同じ版・同じ結果なら何も変えない');
+  assert.equal(readFileSync(f, 'utf8'), once);
+  const clobber = rootWith({ 'municipalities/saitama/hanno/assessments/schedule-events.yaml': `${src}    notes: 手書きのメモ\n` });
+  cpSync(join(root, 'schema', 'profiles'), join(clobber, 'schema', 'profiles'), { recursive: true });
+  assert.throws(() => applyProfileToFile(join(clobber, 'municipalities/saitama/hanno/assessments/schedule-events.yaml'), clobber), /notes/);
+});
+
+// 繰越 (Task 8): caps の when は facts だけを見る。軸点・由来を条件にする必要は実データに無い (今は不要)
+test('caps の when は facts だけを見る: 軸点や由来は条件にならない (今は不要と判断)', () => {
+  const row = { ...meas({ ...FULL, F: 10 }), facts: { partial: true } };
+  assert.equal(score(row, { caps: [{ when: { F: 10 }, max: 10 }] }).core.total, 100, '軸 F は when の語彙ではない');
 });

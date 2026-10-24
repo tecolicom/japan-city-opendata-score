@@ -1,0 +1,76 @@
+# 動的領域プロファイル: 追加軸 F (更新検知性) と G (継続性の代理指標 g_proxy) の段階表。
+# 埼玉 30 自治体の実測 (docs/measurements/saitama-2026-10-24.md) の後に確定した。
+#
+# 各段の basis が、その段の裏付けを示す。
+#   observed … 実データの facts がこの段に当たっている (validate が突き合わせる)
+#   design   … 設計判断で置いた未検証の段。実測の分布では埋まらなかった。
+# 実測で得られた条件付き GET は both / last-modified の 2 値だけで、none は 0 件。
+# よって F の「etag のみ」「none」の段と、G の stable_url の段は観測の裏付けが無い。
+# 観測がその段に初めて当たったとき、validate が basis: design の更新を求める。
+# 点数の尺度は F / G とも 0〜10 (コア 100 点には足さない: docs/index.md §8)。
+# 点の差 (10 / 6 / 0) 自体が設計判断。実測が示したのは「両方」と「Last-Modified のみ」が
+# 現実に分かれて存在すること (19 対 11、トップページ) だけで、差の大きさは示していない。
+# 順序: 先に当たった段を採る。
+profile: dynamic
+revision: 2026-10-24.1
+axis_aliases:
+  G: g_proxy
+axes:
+  F:
+    # --- 観測地点が配信元そのもの (scope=source)。実データはまだ無い (全段 design)。 ---
+    - when: { conditional_get_scope: source, conditional_get: both }
+      points: 10
+      basis: design
+    - when: { conditional_get_scope: source, conditional_get: [etag, last-modified] }
+      points: 6
+      basis: design
+      note: 検証子が 1 つ (ETag か Last-Modified)。両者の優劣を付ける根拠が実測に無いので同点。
+    - when: { conditional_get_scope: source, conditional_get: none }
+      points: 0
+      basis: design
+      note: 条件付き GET が使えない。実測では 0 件で、この段は設計判断。
+    # --- 観測地点が自治体サイトのトップページ (scope=site-top)。配信元そのものではないので estimated。 ---
+    - when: { conditional_get_scope: site-top, conditional_get: both }
+      points: 10
+      basis: observed
+      provenance: estimated
+      note: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+    - when: { conditional_get_scope: site-top, conditional_get: last-modified }
+      points: 6
+      basis: observed
+      provenance: estimated
+      note: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+    - when: { conditional_get_scope: site-top, conditional_get: etag }
+      points: 6
+      basis: design
+      provenance: estimated
+      note: ETag のみ。実測では 0 件で、この段は設計判断。
+    - when: { conditional_get_scope: site-top, conditional_get: none }
+      points: 0
+      basis: design
+      provenance: estimated
+      note: 条件付き GET が使えない。実測では 0 件で、この段は設計判断。
+  G:
+    # g_proxy: 単発訪問で取れる代理指標のみ (恒久 URL か / 版表記 / 既知の障害)。時系列版ではない。
+    # フィードが失敗していて、そのフィード URL がページ上のリンクで確認できているもの。
+    - when: { feed_url_basis: page-link, feed_http_status: [500, 502, 503, 504] }
+      points: 0
+      basis: observed
+      note: ページ上のリンクで確認したフィードが 5xx (既知の障害)。観測は 1 回で、継続の長さは別 (families の known_incidents)。
+    # 組み立てた URL の失敗は、その配信元の継続性の根拠にならない。観測は残すが軸は unknown。
+    - when: { feed_url_basis: assembled, feed_http_status: [500, 502, 503, 504] }
+      points: null
+      basis: observed
+      note: family の feed_patterns から組み立てた URL の失敗。そのサイトがその URL で公開しているか未確認なので、G の根拠にしない。
+    - when: { feed_http_status: 200 }
+      points: null
+      basis: design
+      note: 1 回取れたことは継続性の根拠にならない (観測 0 件。設計判断)。
+    - when: { stable_url: true }
+      points: 8
+      basis: design
+      note: 恒久 URL。stable_url は未記録 (時間をおいた再観測が要る) なので観測 0 件。
+    - when: { stable_url: false }
+      points: 3
+      basis: design
+      note: 年度別パス等の非恒久 URL。観測 0 件。

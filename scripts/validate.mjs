@@ -78,6 +78,7 @@ function checkMunicipalities() {
   const families = new Map(existsSync(familiesDir)
     ? listFiles(familiesDir).filter((n) => /\.ya?ml$/i.test(n)).map((n) => loadYaml(join(familiesDir, n))).map((f) => [f.id, f])
     : []);
+  const profiles = loadProfilesMap();
   const registry = registryPath ? loadRegistry(registryPath) : null;
   const yamlName = (n) => /\.ya?ml$/i.test(n);
   const known = new Set(listMunicipalityDirs(root).map((m) => `${m.pref}/${m.handle}`));
@@ -115,7 +116,7 @@ function checkMunicipalities() {
           errors.push(...errs);
           if (errs.length > 0) continue;
           if (a.domain !== f.replace(/\.ya?ml$/i, '')) errors.push(`${label}: domain (${a.domain}) がファイル名と一致しない`);
-          errors.push(...assessmentSemanticErrors(a, { handle, domains, families, web }).map((e) => `${label}: ${e}`));
+          errors.push(...assessmentSemanticErrors(a, { handle, domains, families, web, profiles }).map((e) => `${label}: ${e}`));
           for (const p of a.publishers) {
             if (publisherIds.has(p.id)) errors.push(`${label}: publisher id が他のファイルと重複: ${p.id}`);
             publisherIds.add(p.id);
@@ -127,6 +128,18 @@ function checkMunicipalities() {
     }
   }
   return errors;
+}
+
+// schema/profiles/*.yaml を name 引きの Map にする (assessment の profile_revision 照合に使う)。壊れた物は checkProfiles が報告する。
+function loadProfilesMap() {
+  const dir = join(schemaDir, 'profiles');
+  const map = new Map();
+  if (!existsSync(dir)) return map;
+  for (const n of listFiles(dir).filter((x) => /\.ya?ml$/i.test(x) && !statSync(join(dir, x)).isDirectory())) {
+    const prof = loadYaml(join(dir, n));
+    if (prof && typeof prof.profile === 'string') map.set(prof.profile, prof);
+  }
+  return map;
 }
 
 // schema/profiles/<name>.yaml (段階表とキャップ規則)。実物は Task 10 が置く。無い/空は正常。
@@ -144,7 +157,7 @@ function checkProfiles() {
     errors.push(...errs);
     if (errs.length > 0) continue;
     if (prof.profile !== n.replace(/\.ya?ml$/i, '')) errors.push(`${label}: profile (${prof.profile}) がファイル名と一致しない`);
-    try { checkProfile(prof); } catch (e) { errors.push(`${label}: ${e.message}`); }
+    try { checkProfile(prof); } catch (e) { errors.push(`${label}: ${e.message}`); continue; }
   }
   return errors;
 }

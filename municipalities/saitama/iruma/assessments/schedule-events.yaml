@@ -14,4 +14,27 @@ publishers:
     observed_at: 2026-10-24
     facts:
       conditional_get: both
+      conditional_get_scope: site-top
       feed_http_status: 502
+      feed_url_basis: page-link
+    axes:
+      A: null
+      B: null
+      C: null
+      D: null
+      E: null
+      F: 10
+      G: 0
+    provenance:
+      A: unknown
+      B: unknown
+      C: unknown
+      D: unknown
+      E: unknown
+      F: estimated
+      G: measured
+    derived_at: 2026-10-24
+    profile: dynamic
+    profile_revision: 2026-10-24.1
+    notes: "推定の根拠 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL
+      そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。"

@@ -3,12 +3,17 @@
 //
 // ctx: { handle }                       … このファイルが置かれた自治体ディレクトリの handle (必須)
 //      { domains }                      … 必須。領域の存在と、axes の profile が領域のプロファイルと一致するかを検査する
+//      { profiles }                     … Map<name, 段階表>。axes を持つ非 static の配信元があるとき必須。
+//        facts から段階表を当て直した結果と保存済み axes の一致、profile_revision の一致を検査する
+//        (axes は導出値。段階表を変えて当て直し忘れると、古い点数が残る)
 //      { families, web }                … families は inherited_from を持つ配信元があるとき必須。
 //        web はその自治体の web.yaml (無ければ undefined)。inherited は web.yaml が存在し、
 //        family_id が一致し、family_confidence が observed/inferred のときだけ書ける。
 //        domains: Map<id, {profile}>、families: Map<id, family>
 // 必須の依存が渡されていないときは検査を黙って飛ばさず、TypeError で失敗する
 // (Task 7 で、依存の渡し忘れにより継承の検査が一度も効いていなかった事故の再発防止)。
+
+import { derivedAxesErrors } from '../score.mjs';
 
 const AXES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const DAY = (s) => Date.parse(`${s}T00:00:00Z`);
@@ -42,6 +47,17 @@ export function assessmentSemanticErrors(a, ctx) {
       if (profile == null) errors.push(`${at}: 領域 ${a.domain} はプロファイル未判定なので axes を書けない`);
       else if (p.profile !== profile) errors.push(`${at}: profile (${p.profile}) が領域 ${a.domain} のプロファイル (${profile}) と違う`);
     }
+
+    if (p.axes && ctx.domains.has(a.domain) && profile != null && profile !== 'static') {
+      if (!ctx.profiles) throw new TypeError(`assessmentSemanticErrors: ${at} は axes を持つので ctx.profiles が必要 (profile_revision の照合を黙って飛ばさない)`);
+      const prof = ctx.profiles.get(p.profile);
+      if (!prof) errors.push(`${at}: profile ${p.profile} の段階表 (schema/profiles/${p.profile}.yaml) が無い`);
+      else {
+        if (p.profile_revision !== prof.revision) errors.push(`${at}: profile_revision (${p.profile_revision}) が段階表 ${prof.profile} の版 (${prof.revision}) と違う (npm run apply-profile で当て直す)`);
+        else errors.push(...derivedAxesErrors(p, prof).map((e) => `${at}: ${e}`));
+      }
+    }
+    if (Object.values(p.provenance ?? {}).includes('estimated') && !p.notes) errors.push(`${at}: estimated の軸があるのに notes (根拠) が無い`);
 
     const axes = p.axes ?? {};
     const prov = p.provenance ?? {};

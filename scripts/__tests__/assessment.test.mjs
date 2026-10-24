@@ -23,7 +23,10 @@ const a = loadYaml(join(root, 'scripts', '__tests__', '__fixtures__', 'assessmen
 
 // schema と意味検査の両方を通って初めて妥当
 const domains = new Map(loadYaml(join(root, 'schema', 'domains.yaml')).domains.map((d) => [d.id, d]));
-const validate = (p) => validatePublisher(p) === true && assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno', domains }).length === 0;
+const validate = (p) => validatePublisher(p) === true && assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno', profiles, domains }).length === 0;
+// 検査用の最小の段階表 (点数に意味は無い)。版 r1 は DER が指す。実物との照合は下の revision テストが持つ。
+const profiles = new Map([['dynamic', { profile: 'dynamic', revision: 'r1', axes: { F: [{ when: { conditional_get: 'both' }, points: 10, basis: 'design' }] } }]]);
+const REAL_REV = loadYaml(join(root, 'schema', 'profiles', 'dynamic.yaml')).revision;
 const pub = { ...a.publishers[1] };
 const pubBase = { ...pub, observed_at: '2026-10-23' };
 const DER = { derived_at: '2026-10-30', profile: 'dynamic', profile_revision: 'r1' };
@@ -41,9 +44,9 @@ test('publisher id は handle で名前空間化される', () => {
   assert.equal(a.publishers[1].id, 'hanno/lib-main');
   assert.ok(!validatePublisher({ ...pub, id: 'lib-main' }), '名前空間なしは不可');
   assert.ok(!validatePublisher({ ...pub, id: 'hanno/Lib Main' }));
-  const errs = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [{ ...pub, id: 'hidaka/lib-main' }] }, { handle: 'hanno', domains });
+  const errs = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [{ ...pub, id: 'hidaka/lib-main' }] }, { handle: 'hanno', profiles, domains });
   assert.ok(errs.some((e) => /handle/.test(e)), '置かれた handle と id の接頭辞が違えば不可');
-  const dup = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pub, pub] }, { handle: 'hanno', domains });
+  const dup = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pub, pub] }, { handle: 'hanno', profiles, domains });
   assert.ok(dup.some((e) => /重複/.test(e)));
 });
 
@@ -177,7 +180,7 @@ test('measured / estimated の軸は観測の記録 (facts) を要求する。A/
 
 test('axes の profile は領域のプロファイルと一致し、未判定の領域には axes を書けない', () => {
   const p = { ...pubBase, ...DER, axes: { A: 5 }, provenance: { A: 'measured' }, facts: { stable_url: true } };
-  const check = (dom, pp) => assessmentSemanticErrors({ domain: dom, publishers: [pp] }, { handle: 'hanno', domains });
+  const check = (dom, pp) => assessmentSemanticErrors({ domain: dom, publishers: [pp] }, { handle: 'hanno', profiles, domains });
   assert.deepEqual(check('schedule-events', p), []);
   assert.ok(check('schedule-events', { ...p, profile: 'static' }).some((e) => /プロファイル/.test(e)), '領域は dynamic');
   assert.ok(check('aed', p).some((e) => /未判定/.test(e)), 'profile が null の領域');
@@ -191,7 +194,7 @@ test('derived_at / profile / profile_revision は axes があるときだけ書�
 test('inherited は web.yaml の確認が要る: 存在・family 一致・確度が observed/inferred', () => {
   const p = { ...pubBase, ...DER, inherited_from: inh, axes: { A: 5 }, provenance: { A: 'inherited' } };
   const web = (o = {}) => ({ handle: 'hanno', family_id: fam.id, family_confidence: 'observed', signals_seen: [], fingerprinted_at: '2026-10-23', ...o });
-  const check = (w) => assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno', domains, families, web: w });
+  const check = (w) => assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno', profiles, domains, families, web: w });
   assert.deepEqual(check(web()), []);
   assert.deepEqual(check(web({ family_confidence: 'inferred' })), []);
   assert.ok(check(undefined).some((e) => /web\.yaml が無い/.test(e)), 'web.yaml が無い');
@@ -260,7 +263,7 @@ test('validate.mjs: 正しい assessment は通り、壊したものは落ちる
     axes: {A: 10}
     derived_at: 2026-10-30
     profile: dynamic
-    profile_revision: r1
+    profile_revision: ${REAL_REV}
     url:`);
   assert.notEqual(inheritedBad.code, 0, '代表実測でない handle からの継承');
   const web = 'municipalities/saitama/hanno/web.yaml';
@@ -269,7 +272,7 @@ test('validate.mjs: 正しい assessment は通り、壊したものは落ちる
     axes: {A: 10}
     derived_at: 2026-10-30
     profile: dynamic
-    profile_revision: r1
+    profile_revision: ${REAL_REV}
     url:`);
   assert.equal(inh1.code, 0, `web.yaml が観測済みなら inherited は通る: ${inh1.out}`);
   const inhFiles = { ...good, [A]: good[A].replace('    url:', `    inherited_from: {family_id: fam-feedphp-sitenew, representative_handle: hanno}
@@ -277,7 +280,7 @@ test('validate.mjs: 正しい assessment は通り、壊したものは落ちる
     axes: {A: 10}
     derived_at: 2026-10-30
     profile: dynamic
-    profile_revision: r1
+    profile_revision: ${REAL_REV}
     url:`) };
   const { [web]: _w, ...noWeb } = inhFiles;
   assert.notEqual(runValidate(noWeb).code, 0, 'web.yaml 無しの inherited');
@@ -290,6 +293,6 @@ test('依存 (domains / families) が無い呼び出しは、検査をスキッ�
   const p = { ...pubBase, ...DER, inherited_from: inh, axes: { A: 5 }, provenance: { A: 'inherited' } };
   const call = (pp, ctx) => () => assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pp] }, ctx);
   assert.throws(call(pubBase, { handle: 'hanno' }), /domains/, 'domains 無しは領域の照合ができない');
-  assert.throws(call(p, { handle: 'hanno', domains }), /families/, 'inherited_from があるのに families 無し');
-  assert.doesNotThrow(call(pubBase, { handle: 'hanno', domains }), 'inherited が無ければ families は要らない');
+  assert.throws(call(p, { handle: 'hanno', profiles, domains }), /families/, 'inherited_from があるのに families 無し');
+  assert.doesNotThrow(call(pubBase, { handle: 'hanno', profiles, domains }), 'inherited が無ければ families は要らない');
 });

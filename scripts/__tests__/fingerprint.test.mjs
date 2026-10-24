@@ -120,3 +120,19 @@ test('fingerprint はネットワークに出ない (html と headers だけで�
   assert.equal(fingerprint(FIXTURE_FEEDPHP_HTML, {}, { familiesDir }).familyId, 'fam-feedphp-sitenew');
   assert.equal(typeof fingerprint('', {}, { familiesDir }), 'object');
 });
+
+// 繰越 (Task 6): min_signals の既定が fingerprint 側と thresholdBasis 側で一致する (正典は family-check.mjs の 1 箇所)
+test('min_signals の既定は fingerprint と thresholdBasis で同じ値を指す', async () => {
+  const fc = await import('../_lib/family-check.mjs');
+  assert.equal(DEFAULT_MIN_SIGNALS, fc.DEFAULT_MIN_SIGNALS);
+  const fam = { id: 'fam-x', signals: ['/a', '/b'] };
+  const rep = (n) => ({ signals_seen: Array.from({ length: n }, (_, i) => ({ signal: `/s${i}`, method: 'html' })) });
+  // 既定の閾値ちょうどで 'observed' になり、1 本少ないと 'below'
+  assert.equal(fc.thresholdBasis(fam, rep(DEFAULT_MIN_SIGNALS)), 'observed');
+  assert.equal(fc.thresholdBasis(fam, rep(DEFAULT_MIN_SIGNALS - 1)), 'below');
+  // fingerprint も同じ本数で当たる / 当たらない
+  const dir = tmpFamilies({ 'fam-x.yaml': 'id: fam-x\nsignals:\n  - /a-sig\n  - /b-sig\n  - /c-sig\n' });
+  const html = (n) => `<html>${['/a-sig', '/b-sig', '/c-sig'].slice(0, n).join(' ')}</html>`;
+  assert.equal(fingerprint(html(DEFAULT_MIN_SIGNALS), {}, { familiesDir: dir }).familyId, 'fam-x');
+  assert.equal(fingerprint(html(DEFAULT_MIN_SIGNALS - 1), {}, { familiesDir: dir }).familyId, null);
+});

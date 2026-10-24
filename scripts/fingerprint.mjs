@@ -8,7 +8,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadYaml } from './_lib/lib.mjs';
-import { thresholdBasis } from './_lib/family-check.mjs';
+import { thresholdBasis, DEFAULT_MIN_SIGNALS } from './_lib/family-check.mjs';
 import { politeFetch } from './_lib/fetch.mjs';
 import { DEFAULT_REGISTRY, loadRecords, prefDirOf, siteUrlOf } from './_lib/municipality.mjs';
 import { stringify } from 'yaml';
@@ -16,9 +16,8 @@ import { stringify } from 'yaml';
 // 既定は repo ルートの families/。cwd 相対にすると、repo ルート以外から呼ばれたときに
 // 黙って 0 件になり、全自治体が familyId: null になってもエラーが出ない。
 export const DEFAULT_FAMILIES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'families');
-// family が min_signals を書いていないときの閾値。
-// 1 本の偶然一致で family を名乗らせたくないので 2 本を既定とする。
-export const DEFAULT_MIN_SIGNALS = 2;
+// family が min_signals を書いていないときの閾値は family-check.mjs が正典 (thresholdBasis と同じ値)。
+export { DEFAULT_MIN_SIGNALS };
 
 // families ディレクトリの YAML を読む。
 // readdirSync はドットファイル (macOS の .DS_Store 等) も返すので必ず除外する。
@@ -136,7 +135,7 @@ async function main() {
         ...(rep && rep.id !== familyId ? {
           family_divergence: {
             observed_at: today,
-            reason: `自動指紋はトップページ HTML だけを読み、${rep.id} の signal は ${signals_seen.length} 本だった (閾値 ${rep.min_signals ?? 2})。family の代表実測 (${repRec.observed_at}) の根拠: ${repRec.evidence}。family 側の記録には feed.php の応答 (502) からエンドポイントの存在を推定したもの (inferred_from_status) が含まれ、自動指紋はトップページ HTML だけを読むのでこの推定を含まない。測っているものが違う`,
+            reason: `自動指紋はトップページ HTML だけを読み、${rep.id} の signal は ${signals_seen.length} 本だった (閾値 ${rep.min_signals ?? DEFAULT_MIN_SIGNALS})。family の代表実測 (${repRec.observed_at}) の根拠: ${repRec.evidence}。family 側の記録には feed.php の応答 (502) からエンドポイントの存在を推定したもの (inferred_from_status) が含まれ、自動指紋はトップページ HTML だけを読むのでこの推定を含まない。測っているものが違う`,
           },
         } : {}),
       };

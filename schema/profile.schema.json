@@ -8,7 +8,12 @@
   "additionalProperties": false,
   "properties": {
     "profile": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "ファイル名と一致させる。" },
-    "revision": { "type": "string", "minLength": 1, "description": "段階表の版。assessment の profile_revision がこれを指す。" },
+    "revision": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}\\.\\d+$", "description": "段階表の版 (改訂日.連番。例 2026-10-24.1)。assessment の profile_revision がこれを指し、validate が一致を検査する。段を変えたら必ず上げる。" },
+    "axis_aliases": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "G": { "const": "g_proxy", "description": "G は単発訪問の代理指標版 (docs/index.md §7)。時系列版と取り違えないよう、G 軸を持つ段階表は g_proxy の別名を宣言する。" } }
+    },
     "axes": {
       "type": "object",
       "minProperties": 1,
@@ -51,7 +56,10 @@
         "additionalProperties": false,
         "properties": {
           "when": { "$ref": "#/$defs/when" },
-          "points": { "type": "integer", "minimum": 0 }
+          "points": { "type": ["integer", "null"], "minimum": 0, "description": "null は『観測はあるがこの軸の根拠にならない』。軸は null + unknown になる (0 点ではない)。" },
+          "basis": { "enum": ["observed", "design"], "description": "この段の裏付け。observed=実測した値がこの段に当たる (実データがある)。design=設計判断で置いた未検証の段。省略不可ではないが、F/G の段には必ず書く (validate が実データと突き合わせる)。" },
+          "provenance": { "enum": ["measured", "estimated"], "description": "この段に当たった軸の由来。省略は measured。観測の地点が配信元そのものでないときは estimated (notes を要する)。" },
+          "note": { "type": "string", "minLength": 1, "description": "この段の根拠や限界。estimated の段では assessment の notes に写される。" }
         }
       }
     }
