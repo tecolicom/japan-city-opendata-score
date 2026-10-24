@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { politeFetch, robotsAllows, USER_AGENT, MIN_INTERVAL_MS } from './fetch.mjs';
+import { politeFetch, robotsAllows, USER_AGENT, MIN_INTERVAL_MS, MAX_REDIRECTS } from './fetch.mjs';
 
 const TOP = 'https://example.invalid/';
 const OTHER = 'https://example.invalid/sub/';
@@ -22,7 +22,7 @@ const sleepRecorder = () => {
 };
 
 // 偽の fetch。呼ばれた URL とヘッダ、同時に走った数を記録する。
-function fetchRecorder({ robots = ALLOW_ALL, robotsStatus = 200, page = '<html>擬似</html>', pageStatus = 200 } = {}) {
+function fetchRecorder({ robots = ALLOW_ALL, robotsStatus = 200, page = '<html>擬似</html>', pageStatus = 200, routes = {} } = {}) {
   const calls = [];
   const state = { inFlight: 0, maxInFlight: 0 };
   const impl = async (url, init = {}) => {
@@ -32,6 +32,13 @@ function fetchRecorder({ robots = ALLOW_ALL, robotsStatus = 200, page = '<html>�
     state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
     await new Promise((r) => setTimeout(r, 0)); // 同時実行があれば観測できるよう 1 tick 譲る
     state.inFlight -= 1;
+    const route = routes[u];
+    if (route !== undefined) {
+      return new Response(route.body ?? '', {
+        status: route.status ?? 200,
+        headers: { 'content-type': 'text/html; charset=utf-8', ...(route.location ? { location: route.location } : {}) },
+      });
+    }
     const isRobots = u.endsWith('/robots.txt');
     return new Response(isRobots ? robots : page, {
       status: isRobots ? robotsStatus : pageStatus,
@@ -230,4 +237,58 @@ test('成功時は本文とヘッダを返す', async () => {
   assert.equal(r.httpStatus, 200);
   assert.equal(r.body, '<html>擬似</html>');
   assert.equal(r.headers['content-type'], 'text/html; charset=utf-8');
+});
+
+// ---- リダイレクト: 移転先のホストの robots.txt を改めて確認する ----
+// lg.jp では `city.x.lg.jp` → `www.city.x.lg.jp` の形が頻出し、これは別オリジンになる。
+// 自動 follow に任せると、元ホストの robots.txt だけ見て別ホストの本文を取ることになる。
+
+const A = 'https://a.invalid/';
+const B = 'https://b.invalid/';
+
+test('別ホストへリダイレクトされたら移転先の robots.txt を確認し、禁止なら本文を取らない', async () => {
+  const { rec, opts } = base({ recorder: { routes: {
+    [A]: { status: 301, location: B },
+    'https://b.invalid/robots.txt': { status: 200, body: 'User-agent: *\nDisallow: /' },
+  } } });
+  const r = await politeFetch(A, opts);
+  assert.equal(r.status, 'robots-denied');
+  assert.equal(r.body, undefined);
+  assert.ok(rec.urls().includes('https://b.invalid/robots.txt'), '移転先の robots.txt を見ていない');
+  assert.ok(!rec.urls().includes(B), '移転先の本文を取ってしまっている');
+  assert.deepEqual(r.redirects, [A]);
+});
+
+test('移転先が許可していればリダイレクトを追って取得する', async () => {
+  const { opts } = base({ recorder: { routes: {
+    [A]: { status: 301, location: B },
+    [B]: { status: 200, body: '<html>移転先</html>' },
+  } } });
+  const r = await politeFetch(A, opts);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.body, '<html>移転先</html>');
+  assert.equal(r.url, B);
+  assert.deepEqual(r.redirects, [A]);
+});
+
+test('リダイレクトの輪は打ち切る', async () => {
+  const { rec, opts } = base({ recorder: { routes: {
+    [A]: { status: 302, location: B },
+    [B]: { status: 302, location: A },
+  } } });
+  const r = await politeFetch(A, opts);
+  assert.equal(r.status, 'redirect-loop');
+  assert.equal(r.body, undefined);
+  assert.ok(rec.urls().filter((u) => u === A || u === B).length <= 3, JSON.stringify(rec.urls()));
+});
+
+test('リダイレクトの連鎖に上限を設ける', async () => {
+  const routes = {};
+  for (let i = 0; i < 12; i += 1) routes[`https://hop.invalid/${i}`] = { status: 301, location: `https://hop.invalid/${i + 1}` };
+  const { rec, opts } = base({ recorder: { routes } });
+  const r = await politeFetch('https://hop.invalid/0', opts);
+  assert.equal(r.status, 'too-many-redirects');
+  assert.equal(r.body, undefined);
+  const pageHits = rec.urls().filter((u) => !u.endsWith('/robots.txt'));
+  assert.equal(pageHits.length, MAX_REDIRECTS + 1, JSON.stringify(pageHits));
 });

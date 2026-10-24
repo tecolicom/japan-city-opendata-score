@@ -8,6 +8,8 @@
 //   - User-Agent に連絡先 URL を入れる
 //   - タイムアウトを設ける
 //   - 取得するのは指定された URL と robots.txt だけ。パスの探索はしない
+//   - リダイレクトは自分で追う。**移転先のホストの robots.txt を改めて確認する**
+//     (lg.jp では `city.x.lg.jp` → `www.city.x.lg.jp` の形が頻出し、別オリジンになる)
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -18,6 +20,7 @@ export const USER_AGENT = `${UA_PRODUCT_TOKEN}/0.1 (+https://github.com/tecolico
 
 export const MIN_INTERVAL_MS = 2000;      // リクエスト間隔の下限
 export const DEFAULT_TIMEOUT_MS = 15000;  // 無制限に待たない
+export const MAX_REDIRECTS = 5;           // リダイレクトを追う上限
 
 // ---- robots.txt ----
 
@@ -152,10 +155,13 @@ async function request(href, ctx) {
   try {
     const res = await ctx._fetch(href, {
       headers: { 'user-agent': ctx.userAgent, accept: 'text/html,application/xhtml+xml,*/*;q=0.1' },
-      redirect: 'follow',
+      redirect: 'manual',   // 追うかどうかは robots を見てから決める
       signal: controller.signal,
     });
     const headers = headersToObject(res.headers);
+    if (res.status >= 300 && res.status < 400 && headers.location) {
+      return { url: href, status: 'redirect', httpStatus: res.status, headers, location: headers.location };
+    }
     if (!res.ok) return { url: href, status: 'http-error', httpStatus: res.status, headers };
     return { url: href, status: 'ok', httpStatus: res.status, headers, body: await res.text() };
   } catch (e) {
@@ -171,6 +177,19 @@ async function request(href, ctx) {
   }
 }
 
+// robots.txt 自身のリダイレクトは RFC 9309 に従って追う (移転先の robots.txt が正。
+// ページと違い「その robots.txt を読む許可」を robots.txt に問うことはできない)。
+async function requestFollowingRedirects(href, ctx) {
+  let current = href;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const res = await request(current, ctx);
+    if (res.status !== 'redirect') return res;
+    if (hop === MAX_REDIRECTS) return { ...res, status: 'too-many-redirects' };
+    current = new URL(res.location, current).href;
+  }
+  return { url: href, status: 'too-many-redirects', httpStatus: null, headers: {} };
+}
+
 // ---- robots.txt の解決 (ホストごとに 1 回) ----
 
 async function robotsRecordFor(origin, ctx) {
@@ -178,7 +197,7 @@ async function robotsRecordFor(origin, ctx) {
   const disk = readJson(robotsPath(ctx.cacheDir, origin));
   let record = disk;
   if (record === null) {
-    const res = await request(new URL('/robots.txt', origin).href, { ...ctx, interval: ctx.minIntervalMs });
+    const res = await requestFollowingRedirects(new URL('/robots.txt', origin).href, { ...ctx, interval: ctx.minIntervalMs });
     if (res.status === 'ok') record = { status: 'ok', body: res.body };
     else if (res.status === 'http-error' && res.httpStatus >= 400 && res.httpStatus < 500) record = { status: 'absent' };
     else record = { status: 'unavailable' };
@@ -197,6 +216,7 @@ async function robotsRecordFor(origin, ctx) {
  *
  * 返り値: `{url, status, httpStatus, headers, body?, fromCache, reason?}`
  *   status: 'ok' | 'robots-denied' | 'http-error' | 'timeout' | 'network-error'
+ *         | 'redirect-loop' | 'too-many-redirects'
  *   body は status が 'ok' のときだけ存在する。
  *
  * options:
@@ -227,33 +247,74 @@ export async function politeFetch(url, options = {}) {
   return run;
 }
 
-async function fetchOne(url, ctx) {
-  const u = new URL(url);
-  const cached = readJson(pagePath(ctx.cacheDir, u.href));
-  if (cached !== null) return { ...cached, fromCache: true };
-
+// この URL を取ってよいか、間隔をどれだけ空けるかを robots.txt に問う。
+async function robotsGate(u, ctx) {
   const record = ctx._robots == null
     ? await robotsRecordFor(u.origin, ctx)
     : { status: 'ok', body: ctx._robots };
+  if (record.status === 'ok') {
+    return {
+      allowed: robotsAllows(record.body, `${u.pathname}${u.search}`, ctx.productToken),
+      reason: 'rule',
+      crawlDelayMs: robotsCrawlDelayMs(record.body, ctx.productToken),
+    };
+  }
+  if (record.status === 'absent') return { allowed: true, reason: 'absent', crawlDelayMs: null };
+  return { allowed: false, reason: 'robots-unavailable', crawlDelayMs: null };  // 取れないものを許可と解釈しない
+}
 
-  const allowed = record.status === 'ok'
-    ? robotsAllows(record.body, `${u.pathname}${u.search}`, ctx.productToken)
-    : record.status === 'absent';   // 'unavailable' は許可と解釈しない
+const persist = (ctx, key, result) => {
+  writeJson(pagePath(ctx.cacheDir, key), { ...result, fetched_at: new Date().toISOString() });
+};
 
-  if (!allowed) {
-    const reason = record.status === 'ok' ? 'rule' : 'robots-unavailable';
-    const result = { url: u.href, status: 'robots-denied', httpStatus: null, headers: {}, reason };
-    // 規則による禁止は永続化する (再実行で叩き直さない)。
-    // robots.txt が取れなかっただけのものは焼かない (一時障害を恒久の禁止にしない)。
-    if (reason === 'rule') writeJson(pagePath(ctx.cacheDir, u.href), { ...result, fetched_at: new Date().toISOString() });
+async function fetchOne(url, ctx) {
+  const requested = new URL(url);
+  const cached = readJson(pagePath(ctx.cacheDir, requested.href));
+  if (cached !== null) return { ...cached, fromCache: true };
+
+  const redirects = [];
+  let current = requested;
+  for (let hop = 0; ; hop += 1) {
+    // リダイレクトを追うたびに、その**移転先のホストの** robots.txt を確認する。
+    const gate = await robotsGate(current, ctx);
+    if (!gate.allowed) {
+      const result = {
+        url: current.href,
+        status: 'robots-denied',
+        httpStatus: null,
+        headers: {},
+        reason: gate.reason,
+        ...(redirects.length > 0 ? { redirects } : {}),
+      };
+      // 規則による禁止は永続化する (再実行で叩き直さない)。
+      // robots.txt が取れなかっただけのものは焼かない (一時障害を恒久の禁止にしない)。
+      if (gate.reason === 'rule') persist(ctx, requested.href, result);
+      return { ...result, fromCache: false };
+    }
+
+    const res = await request(current.href, {
+      ...ctx,
+      interval: Math.max(ctx.minIntervalMs, gate.crawlDelayMs ?? 0),
+    });
+
+    if (res.status === 'redirect' && hop < MAX_REDIRECTS) {
+      const next = new URL(res.location, current);
+      if (next.href === current.href || redirects.includes(next.href)) {
+        const loop = { ...res, status: 'redirect-loop', redirects: [...redirects, current.href] };
+        persist(ctx, requested.href, loop);
+        return { ...loop, fromCache: false };
+      }
+      redirects.push(current.href);
+      current = next;
+      continue;
+    }
+
+    const result = {
+      ...(res.status === 'redirect' ? { ...res, status: 'too-many-redirects' } : res),
+      ...(redirects.length > 0 ? { redirects } : {}),
+    };
+    // 一時障害はキャッシュしない (永久に再取得不能にならないように)。
+    if (result.status !== 'timeout' && result.status !== 'network-error') persist(ctx, requested.href, result);
     return { ...result, fromCache: false };
   }
-
-  const crawlDelay = record.status === 'ok' ? robotsCrawlDelayMs(record.body, ctx.productToken) : null;
-  const res = await request(u.href, { ...ctx, interval: Math.max(ctx.minIntervalMs, crawlDelay ?? 0) });
-  // 一時障害はキャッシュしない (永久に再取得不能にならないように)。
-  if (res.status !== 'timeout' && res.status !== 'network-error') {
-    writeJson(pagePath(ctx.cacheDir, u.href), { ...res, fetched_at: new Date().toISOString() });
-  }
-  return { ...res, fromCache: false };
 }
