@@ -15,8 +15,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 // 取得先のログに残る識別子。連絡先 URL (`+https://...`) を必ず含める。
+//
+// 連絡先は **実在して解決する URL** でなければ意味がない。この repo はまだ公開されて
+// いないので、hanno-data の既存クローラと同じ `https://city.tecoli.com` を指す。
+// TODO: この repo を公開したら、連絡先をプロジェクトの URL に差し替える。
 export const UA_PRODUCT_TOKEN = 'japan-public-data-index';
-export const USER_AGENT = `${UA_PRODUCT_TOKEN}/0.1 (+https://github.com/tecolicom/japan-public-data-index)`;
+export const USER_AGENT = `${UA_PRODUCT_TOKEN}/0.1 (+https://city.tecoli.com)`;
 
 export const MIN_INTERVAL_MS = 2000;      // リクエスト間隔の下限
 export const DEFAULT_TIMEOUT_MS = 15000;  // 無制限に待たない
