@@ -142,7 +142,8 @@ test('signals_seen は method 必須で、観測と推定が機械的に区別�
   assert.ok(!withSeen([{ signal: sig, method: 'guess' }]));
   assert.ok(!withSeen([sig]), '裸の文字列は不可');
   const by = Object.fromEntries(f.measured_representatives.map((m) => [m.handle, m]));
-  assert.ok(by.hanno.signals_seen.every((x) => x.method === 'html'));
+  assert.ok(by.hanno.signals_seen.every((x) => (x.signal === '/resource/js/foot_print.js' ? x.method === 'asset_fetch' : x.method === 'html')),
+    'foot_print.js はトップ HTML に無く、JS を直接取得して確認した (asset_fetch)');
   assert.ok(by.iruma.signals_seen.every((x) => x.method === 'html'));
   assert.ok(by.hidaka.signals_seen.every((x) => x.method === 'html'));
   assert.deepEqual(by['moroyama-town'].signals_seen.filter((x) => x.method === 'inferred_from_status')

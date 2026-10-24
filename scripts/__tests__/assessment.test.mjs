@@ -121,7 +121,7 @@ test('domain_name は url のホストと一致する', () => {
 const fam = loadYaml(join(root, 'families', 'fam-feedphp-sitenew.yaml'));
 const families = new Map([[fam.id, fam]]);
 const [S1, S2] = fam.signals;
-const webOf = (seen, conf, id = fam.id) => ({ handle: 'hanno', family_id: id, family_confidence: conf, signals_seen: seen, fingerprinted_at: '2026-10-23' });
+const webOf = (seen, conf, id = fam.id) => ({ handle: 'hanno', url: 'https://www.city.hanno.lg.jp/', family_id: id, family_confidence: conf, signals_seen: seen, fingerprinted_at: '2026-10-23' });
 const sig = (signal, method = 'html') => ({ signal, method });
 
 test('web.yaml: family が未特定でも記録でき、確度は導出値の enum', () => {
