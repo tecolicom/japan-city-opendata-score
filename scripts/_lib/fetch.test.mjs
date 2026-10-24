@@ -356,3 +356,12 @@ test('本物の fetch でも 3xx を自分で追い、移転先の robots.txt �
     await new Promise((r) => server.close(r));
   }
 });
+
+test('robots.txt が取れない理由を cause に残す (判断は拒否のまま)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pf-cause-'));
+  const _fetch = async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }); };
+  const r = await politeFetch('https://nx.example.invalid/', { cacheDir: dir, _fetch, _sleep: async () => {} });
+  assert.equal(r.status, 'robots-denied');
+  assert.equal(r.reason, 'robots-unavailable');
+  assert.equal(r.cause, 'network:ENOTFOUND');
+});

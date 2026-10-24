@@ -102,7 +102,7 @@ async function main() {
     const url = siteUrlOf(r);
     if (!url) { run.push({ handle: r.handle, status: 'no-verified-url' }); console.log(`${r.handle}\tno-verified-url`); continue; }
     const res = await politeFetch(url, { cacheDir, _fetch: loggedFetch });
-    const entry = { handle: r.handle, url, status: res.status, httpStatus: res.httpStatus, fromCache: res.fromCache, finalUrl: res.url, redirects: res.redirects ?? [], reason: res.reason };
+    const entry = { handle: r.handle, url, status: res.status, httpStatus: res.httpStatus, fromCache: res.fromCache, finalUrl: res.url, redirects: res.redirects ?? [], reason: res.reason, cause: res.cause };
     if (res.status === 'ok') {
       const { signals, familyId } = fingerprint(res.body, res.headers, { families });
       const family = families.find((f) => f.id === familyId);

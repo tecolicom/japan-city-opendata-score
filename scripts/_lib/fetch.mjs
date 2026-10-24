@@ -175,6 +175,7 @@ async function request(href, ctx) {
     return {
       url: href,
       status: timedOut ? 'timeout' : 'network-error',
+      code: e?.cause?.code ?? e?.code ?? null,
       httpStatus: null,
       headers: {},
       error: String(e?.message ?? e),
@@ -197,6 +198,17 @@ async function requestFollowingRedirects(href, ctx) {
   return { url: href, status: 'too-many-redirects', httpStatus: null, headers: {} };
 }
 
+// robots.txt が取れなかった理由。判断 (拒否に倒す) は変えず、診断のために記録するだけ。
+//   network:ENOTFOUND = DNS 不達 (URL が間違っている) / network:ECONNREFUSED 等 = 接続拒否
+//   timeout / http:503 等 = 相手側の不調。
+export function causeOf(res) {
+  if (res.status === 'timeout') return 'timeout';
+  if (res.status === 'network-error') return `network:${res.code ?? 'unknown'}`;
+  if (res.status === 'too-many-redirects') return 'too-many-redirects';
+  if (res.httpStatus != null) return `http:${res.httpStatus}`;
+  return res.status;
+}
+
 // ---- robots.txt の解決 (ホストごとに 1 回) ----
 
 async function robotsRecordFor(origin, ctx) {
@@ -209,7 +221,7 @@ async function robotsRecordFor(origin, ctx) {
     // 「robots.txt が無い」と読めるのは 404 / 410 だけ。4xx を一律で全許可にしてはいけない。
     // 429 は「叩きすぎだ」、403 / 401 は「お前には見せない」であって、取得の許可ではない。
     else if (res.httpStatus === 404 || res.httpStatus === 410) record = { status: 'absent' };
-    else record = { status: 'unavailable' };
+    else record = { status: 'unavailable', cause: causeOf(res) };
     // 取れなかった (5xx / 通信障害 / タイムアウト) ものはディスクに焼かない。
     // 一時障害で永久に「取得禁止」に固定されるのを避ける。
     if (record.status !== 'unavailable') writeJson(robotsPath(ctx.cacheDir, origin), record);
@@ -269,7 +281,7 @@ async function robotsGate(u, ctx) {
     };
   }
   if (record.status === 'absent') return { allowed: true, reason: 'absent', crawlDelayMs: null };
-  return { allowed: false, reason: 'robots-unavailable', crawlDelayMs: null };  // 取れないものを許可と解釈しない
+  return { allowed: false, reason: 'robots-unavailable', cause: record.cause, crawlDelayMs: null };  // 取れないものを許可と解釈しない
 }
 
 const persist = (ctx, key, result) => {
@@ -293,6 +305,7 @@ async function fetchOne(url, ctx) {
         httpStatus: null,
         headers: {},
         reason: gate.reason,
+        ...(gate.cause ? { cause: gate.cause } : {}),
         ...(redirects.length > 0 ? { redirects } : {}),
       };
       // 規則による禁止は永続化する (再実行で叩き直さない)。
