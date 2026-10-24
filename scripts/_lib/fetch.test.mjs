@@ -1,0 +1,233 @@
+// 取得層のテスト。**ネットワークには一切出ない** — fetch は必ず注入する。
+// 目的は「礼儀をそう書いた」ではなく「そう動く」ことを示すこと。
+// 偽の fetch が受け取った URL・ヘッダ・呼び出し回数・同時実行数・待ち時間を記録して検証する。
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { politeFetch, robotsAllows, USER_AGENT, MIN_INTERVAL_MS } from './fetch.mjs';
+
+const TOP = 'https://example.invalid/';
+const OTHER = 'https://example.invalid/sub/';
+const ROBOTS = 'https://example.invalid/robots.txt';
+const ALLOW_ALL = 'User-agent: *\nDisallow:';
+
+const freshCache = () => mkdtempSync(join(tmpdir(), 'jpdi-cache-'));
+
+// 待ち時間は記録するだけで実際には待たない (テストを 2 秒 × n で遅くしないため)。
+const sleepRecorder = () => {
+  const waits = [];
+  return { waits, sleep: async (ms) => { waits.push(ms); } };
+};
+
+// 偽の fetch。呼ばれた URL とヘッダ、同時に走った数を記録する。
+function fetchRecorder({ robots = ALLOW_ALL, robotsStatus = 200, page = '<html>擬似</html>', pageStatus = 200 } = {}) {
+  const calls = [];
+  const state = { inFlight: 0, maxInFlight: 0 };
+  const impl = async (url, init = {}) => {
+    const u = String(url);
+    calls.push({ url: u, headers: init.headers ?? {} });
+    state.inFlight += 1;
+    state.maxInFlight = Math.max(state.maxInFlight, state.inFlight);
+    await new Promise((r) => setTimeout(r, 0)); // 同時実行があれば観測できるよう 1 tick 譲る
+    state.inFlight -= 1;
+    const isRobots = u.endsWith('/robots.txt');
+    return new Response(isRobots ? robots : page, {
+      status: isRobots ? robotsStatus : pageStatus,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+  };
+  return { impl, calls, urls: () => calls.map((c) => c.url), state };
+}
+
+// 時計を止めておくと「間隔を空けたか」が経過時間に揺らされずに測れる。
+const frozenNow = () => 1_700_000_000_000;
+
+const base = (extra = {}) => {
+  const rec = fetchRecorder(extra.recorder);
+  const slp = sleepRecorder();
+  return {
+    rec,
+    slp,
+    opts: { cacheDir: extra.cacheDir ?? freshCache(), _fetch: rec.impl, _sleep: slp.sleep, _now: frozenNow, ...extra.opts },
+  };
+};
+
+// ---- Review Focus 1: robots.txt の尊重 ----
+
+test('robots.txt が禁じているパスは取得しない', async () => {
+  const { rec, opts } = base();
+  const r = await politeFetch(TOP, { ...opts, _robots: 'User-agent: *\nDisallow: /' });
+  assert.equal(r.status, 'robots-denied');
+  assert.equal(r.body, undefined);        // 本文を取っていない
+  assert.deepEqual(rec.urls(), []);       // そもそも 1 度もネットワークに出ていない
+});
+
+test('robots.txt が取得できないとき (5xx) は取得を見送る', async () => {
+  const { rec, opts } = base({ recorder: { robotsStatus: 503 } });
+  const r = await politeFetch(TOP, opts);
+  assert.equal(r.status, 'robots-denied');
+  assert.equal(r.body, undefined);
+  assert.deepEqual(rec.urls(), [ROBOTS]);  // robots.txt を見に行っただけで本文は取っていない
+});
+
+test('robots.txt が 404 なら制限なしとして扱う', async () => {
+  const { opts } = base({ recorder: { robotsStatus: 404 } });
+  const r = await politeFetch(TOP, opts);
+  assert.equal(r.status, 'ok');
+});
+
+test('robots.txt はホストごとに 1 回しか取らない', async () => {
+  const { rec, opts } = base();
+  await politeFetch(TOP, opts);
+  await politeFetch(OTHER, opts);
+  assert.equal(rec.urls().filter((u) => u === ROBOTS).length, 1);
+});
+
+test('取得するのは robots.txt と指定 URL だけ (探索をしない)', async () => {
+  const { rec, opts } = base();
+  await politeFetch(TOP, opts);
+  assert.deepEqual([...new Set(rec.urls())].sort(), [TOP, ROBOTS].sort());
+});
+
+// ---- robots.txt のパース ----
+
+test('robotsAllows は最長一致で Allow / Disallow を決める', () => {
+  const txt = 'User-agent: *\nDisallow: /cgi-bin/\nAllow: /cgi-bin/feed.php\n';
+  assert.equal(robotsAllows(txt, '/cgi-bin/feed.php?siteNew=1'), true);
+  assert.equal(robotsAllows(txt, '/cgi-bin/admin'), false);
+  assert.equal(robotsAllows(txt, '/'), true);
+});
+
+test('robotsAllows は * と $ を解釈する', () => {
+  assert.equal(robotsAllows('User-agent: *\nDisallow: /*.pdf$', '/a/b.pdf'), false);
+  assert.equal(robotsAllows('User-agent: *\nDisallow: /*.pdf$', '/a/b.pdf?x=1'), true);
+});
+
+test('robotsAllows は空の Disallow を全許可として扱う', () => {
+  assert.equal(robotsAllows('User-agent: *\nDisallow:', '/anything'), true);
+});
+
+test('robotsAllows は自分の product token のグループを * より優先する', () => {
+  const txt = 'User-agent: *\nDisallow:\n\nUser-agent: japan-public-data-index\nDisallow: /\n';
+  assert.equal(robotsAllows(txt, '/'), false);
+});
+
+test('robotsAllows は該当グループが無ければ全許可', () => {
+  assert.equal(robotsAllows('User-agent: Googlebot\nDisallow: /', '/'), true);
+});
+
+test('robotsAllows はコメントを無視する', () => {
+  assert.equal(robotsAllows('User-agent: *  # 全部\nDisallow: /secret  # 秘密', '/secret/x'), false);
+});
+
+// ---- キャッシュ ----
+
+test('キャッシュがあれば再取得しない', async () => {
+  const cacheDir = freshCache();
+  const first = base({ cacheDir });
+  const r1 = await politeFetch(TOP, first.opts);
+  assert.equal(r1.fromCache, false);
+
+  // 2 回目は別プロセス相当 (記録器も作り直す) — ディスクのキャッシュだけが頼り
+  const second = base({ cacheDir });
+  const r2 = await politeFetch(TOP, second.opts);
+  assert.equal(r2.fromCache, true);
+  assert.equal(r2.body, r1.body);
+  assert.deepEqual(second.rec.urls(), []);   // robots.txt すら引き直さない
+});
+
+test('robots-denied もキャッシュして再実行で叩き直さない', async () => {
+  const cacheDir = freshCache();
+  const first = base({ cacheDir, recorder: { robots: 'User-agent: *\nDisallow: /' } });
+  assert.equal((await politeFetch(TOP, first.opts)).status, 'robots-denied');
+  const second = base({ cacheDir });
+  const r = await politeFetch(TOP, second.opts);
+  assert.equal(r.status, 'robots-denied');
+  assert.equal(r.fromCache, true);
+  assert.deepEqual(second.rec.urls(), []);
+});
+
+// テスト自体にも制限を付ける: 取得側のタイムアウトが外れたら「落ちる」(ハングしない)。
+test('一時障害 (タイムアウト) はキャッシュしない', { timeout: 5000 }, async () => {
+  const cacheDir = freshCache();
+  const hang = (url, init) => new Promise((_, reject) => {
+    init.signal.addEventListener('abort', () => reject(init.signal.reason ?? new Error('aborted')));
+  });
+  const slp = sleepRecorder();
+  const r1 = await politeFetch(TOP, { cacheDir, _robots: ALLOW_ALL, _fetch: hang, _sleep: slp.sleep, _now: frozenNow, timeoutMs: 20 });
+  assert.equal(r1.status, 'timeout');
+  assert.equal(r1.body, undefined);
+  const retry = base({ cacheDir });
+  const r2 = await politeFetch(TOP, retry.opts);
+  assert.equal(r2.status, 'ok');
+  assert.equal(r2.fromCache, false);
+});
+
+test('cacheDir を渡さない呼び出しは拒否する (黙って再取得させない)', async () => {
+  const { opts } = base();
+  await assert.rejects(() => politeFetch(TOP, { ...opts, cacheDir: undefined }), /cacheDir/);
+});
+
+// ---- User-Agent ----
+
+test('User-Agent に連絡先 URL が入る', () => {
+  assert.match(USER_AGENT, /\+https?:\/\//);
+});
+
+test('実際のリクエストすべてに連絡先つき User-Agent が載る', async () => {
+  const { rec, opts } = base();
+  await politeFetch(TOP, opts);
+  assert.ok(rec.calls.length >= 2);
+  for (const c of rec.calls) {
+    const ua = c.headers['user-agent'] ?? c.headers['User-Agent'];
+    assert.match(ua ?? '', /\+https?:\/\//, c.url);
+  }
+});
+
+// ---- 間隔と同時実行 ----
+
+test('既定の間隔は 2 秒以上', () => {
+  assert.ok(MIN_INTERVAL_MS >= 2000, String(MIN_INTERVAL_MS));
+});
+
+test('リクエストの間に既定 2 秒以上の間隔を置く', async () => {
+  const { slp, opts } = base();
+  await politeFetch(TOP, opts);
+  await politeFetch(OTHER, opts);
+  assert.ok(slp.waits.length >= 1, '待ちが 1 度も入っていない');
+  for (const ms of slp.waits) assert.ok(ms >= MIN_INTERVAL_MS, `待ち ${ms}ms`);
+});
+
+test('robots.txt の Crawl-delay が 2 秒より長ければそれに従う', async () => {
+  const { slp, opts } = base({ recorder: { robots: 'User-agent: *\nCrawl-delay: 5\nDisallow:' } });
+  await politeFetch(TOP, opts);
+  await politeFetch(OTHER, opts);
+  assert.ok(Math.max(...slp.waits) >= 5000, JSON.stringify(slp.waits));
+});
+
+test('同時実行は 1 に絞られる', async () => {
+  const { rec, opts } = base();
+  await Promise.all([TOP, OTHER, 'https://example.invalid/third/'].map((u) => politeFetch(u, opts)));
+  assert.equal(rec.state.maxInFlight, 1);
+});
+
+// ---- その他の応答 ----
+
+test('HTTP エラーは本文を持たず httpStatus を記録する', async () => {
+  const { opts } = base({ recorder: { pageStatus: 404 } });
+  const r = await politeFetch(TOP, opts);
+  assert.equal(r.status, 'http-error');
+  assert.equal(r.httpStatus, 404);
+  assert.equal(r.body, undefined);
+});
+
+test('成功時は本文とヘッダを返す', async () => {
+  const { opts } = base();
+  const r = await politeFetch(TOP, opts);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.httpStatus, 200);
+  assert.equal(r.body, '<html>擬似</html>');
+  assert.equal(r.headers['content-type'], 'text/html; charset=utf-8');
+});

@@ -1,0 +1,7 @@
+# 判定が別 family に吸われないことを確かめるための当て馬 (架空)。
+id: fam-fixture-decoy
+product: null
+min_signals: 2
+signals:
+  - /decoy/alpha.js
+  - /decoy/beta.js

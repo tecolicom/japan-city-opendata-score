@@ -1,0 +1,13 @@
+# テスト用の最小 family (指紋判定の単体テスト専用)。
+# 実物は families/fam-feedphp-sitenew.yaml で、Task 6 が作る。
+# ここに置くのは判定に要る最小のキーだけ。family の全スキーマは Task 6 の正典。
+id: fam-feedphp-sitenew
+product: null
+min_signals: 2
+signals:
+  - /cgi-bin/feed.php?siteNew=
+  - /index.update.json
+  - /news_list.html
+  - /theme/base/js/mutual_switching/
+  - /resource/js/foot_print.js
+  - "<!-- CMS編集領域ここから -->"
