@@ -6,5 +6,11 @@ publishers:
     entity_type: municipality
     domain_name: www.city.gyoda.lg.jp
     url: https://www.city.gyoda.lg.jp/evnet_list.html
-    form: イベント一覧 (HTML) とイベントカレンダー
+    form: イベント一覧 (HTML) とイベントカレンダー。facts.conditional_get は自治体サイトのトップページで観測 (配信元の URL
+      そのものではない)。facts.feed_http_status は
+      https://www.city.gyoda.lg.jp/cgi-bin/feed.php?siteNew=1&displayCount=10&displayRange=90&includeShortcut=0
+      の取得結果 (2026-10-24 に 1 回)
     observed_at: 2026-10-24
+    facts:
+      conditional_get: both
+      feed_http_status: 502

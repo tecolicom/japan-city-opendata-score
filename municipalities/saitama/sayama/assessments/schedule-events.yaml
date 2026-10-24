@@ -6,5 +6,7 @@ publishers:
     entity_type: municipality
     domain_name: www.city.sayama.saitama.jp
     url: https://www.city.sayama.saitama.jp/kankou/event/index.html
-    form: イベント・講座 (HTML)
+    form: イベント・講座 (HTML)。facts.conditional_get は自治体サイトのトップページで観測 (配信元の URL そのものではない)
     observed_at: 2026-10-24
+    facts:
+      conditional_get: last-modified

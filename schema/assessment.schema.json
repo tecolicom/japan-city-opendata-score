@@ -162,6 +162,12 @@
             },
             "standard_od": {
               "type": "boolean"
+            },
+            "feed_http_status": {
+              "description": "form に書いたフィード URL を observed_at に 1 回取得したときの HTTP ステータス。502 などの失敗も観測事実 (形式や条件付き GET は観測できないので feed_format / conditional_get は書かない)。",
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
             }
           }
         },

@@ -6,5 +6,12 @@ publishers:
     entity_type: municipality
     domain_name: www.city.iruma.saitama.jp
     url: https://www.city.iruma.saitama.jp/event_list.html
-    form: イベント情報一覧 (HTML) と新着 RSS (feed.php、2026-10-24 時点で 502)
+    form: イベント情報一覧 (HTML) と新着 RSS (feed.php、2026-10-24 時点で
+      502)。facts.conditional_get は自治体サイトのトップページで観測 (配信元の URL
+      そのものではない)。facts.feed_http_status は
+      https://www.city.iruma.saitama.jp/cgi-bin/feed.php?siteNew=1&displayCount=15&displayRange=90&includeShortcut=0
+      の取得結果 (2026-10-24 に 1 回)
     observed_at: 2026-10-24
+    facts:
+      conditional_get: both
+      feed_http_status: 502

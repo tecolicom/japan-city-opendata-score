@@ -6,5 +6,8 @@ publishers:
     entity_type: municipality
     domain_name: www.city.shiki.lg.jp
     url: https://www.city.shiki.lg.jp/calendar/
-    form: イベントカレンダー (HTML)
+    form: イベントカレンダー (HTML)。facts.conditional_get は自治体サイトのトップページで観測 (配信元の URL
+      そのものではない)
     observed_at: 2026-10-24
+    facts:
+      conditional_get: last-modified
