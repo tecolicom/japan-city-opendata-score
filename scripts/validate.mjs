@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
-import { familySemanticErrors, webSemanticErrors, webUrlErrors, representativeDivergenceErrors } from './_lib/family-check.mjs';
+import { familySemanticErrors, webSemanticErrors, webUrlErrors, representativeDivergenceErrors, representativeBackingErrors } from './_lib/family-check.mjs';
 import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
 import { checkProfile, profileBasisErrors } from './score.mjs';
 import { DEFAULT_REGISTRY } from './_lib/municipality.mjs';
@@ -24,6 +24,9 @@ const noRegistry = process.argv.includes('--no-registry');
 const registryPath = noRegistry ? null : (argOf('--registry') ?? process.env.REGISTRY_PATH ?? DEFAULT_REGISTRY);
 const schemaDir = join(root, 'schema');
 const familiesDir = join(root, 'families');
+
+// URL 照合の実施状況 (出力に出す。照合が働いたかどうかを黙らせない)。
+const urlStats = { checked: 0, skipped: 0 };
 
 const ajv = new Ajv({ allErrors: true, strict: true });
 addFormats(ajv);
@@ -68,6 +71,17 @@ function checkFamilies() {
     if (ids.has(family.id)) errors.push(`families/${name}: id が重複: ${family.id}`);
     ids.add(family.id);
   }
+  // 代表実測は measured_representatives の側から回す (municipalities/ を回ると、ディレクトリの無い handle が素通りする)。
+  const webs = new Map();
+  for (const { handle, dir } of listMunicipalityDirs(root)) {
+    if (existsSync(join(dir, 'web.yaml'))) webs.set(handle, loadYaml(join(dir, 'web.yaml')));
+  }
+  const loaded = new Map();
+  for (const name of files) {
+    const f = loadYaml(join(familiesDir, name));
+    if (validate(f)) loaded.set(f.id, f);
+  }
+  errors.push(...representativeBackingErrors(loaded, webs));
   return errors;
 }
 
@@ -107,7 +121,10 @@ function checkMunicipalities() {
         if (w.handle !== handle) errors.push(`${at}/web.yaml: handle (${w.handle}) がディレクトリ名と一致しない`);
         errors.push(...webSemanticErrors(w, families).map((e) => `${at}/web.yaml: ${e}`));
         errors.push(...representativeDivergenceErrors(w, families).map((e) => `${at}/web.yaml: ${e}`));
-        if (registry?.get(handle)?.website) errors.push(...webUrlErrors(w, registry.get(handle).website).map((e) => `${at}/web.yaml: ${e}`));
+        if (registry?.get(handle)?.website) {
+          urlStats.checked++;
+          errors.push(...webUrlErrors(w, registry.get(handle).website).map((e) => `${at}/web.yaml: ${e}`));
+        } else if (registry) urlStats.skipped++;
       }
     }
     for (const n of listFiles(dir)) {
@@ -196,6 +213,17 @@ const errors = [];
 if (registryPath && !existsSync(registryPath)) {
   errors.push(`レジストリが無い: ${registryPath} (handle の実在と URL の照合ができない。--registry か環境変数 REGISTRY_PATH で指定する。city-tecoli-data を隣にクローンする)`);
 }
+// レジストリが website を 1 件も持たないなら URL 照合は構造上働かない。黙ってスキップせず落とす。
+let registryTotal = 0;
+let registryNoWebsite = 0;
+if (registryPath && existsSync(registryPath)) {
+  const reg = loadRegistry(registryPath);
+  registryTotal = reg.size;
+  registryNoWebsite = [...reg.values()].filter((r) => !r.website).length;
+  if (registryTotal > 0 && registryNoWebsite === registryTotal) {
+    errors.push(`レジストリの website が 0/${registryTotal} 件。URL 照合ができない (レジストリがそのフィールドを持っていない)。website を持つ版のレジストリを使う: ${registryPath}`);
+  }
+}
 if (!existsSync(schemaDir)) {
   errors.push('schema/: 見つからない');
 } else {
@@ -220,4 +248,7 @@ if (errors.length > 0) {
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
 }
-console.log(`validate: OK (${Object.keys(validators).join(', ')}) ${registryPath ? `レジストリ照合あり: ${registryPath}` : 'レジストリ照合なし (--no-registry)'}`);
+const registryNote = registryPath
+  ? `レジストリ照合あり (handle の実在): ${registryPath}; website 無し ${registryNoWebsite}/${registryTotal} 件; URL 照合 実施 ${urlStats.checked} 件・website 無しで未実施 ${urlStats.skipped} 件`
+  : 'レジストリ照合なし (--no-registry)';
+console.log(`validate: OK (${Object.keys(validators).join(', ')}) ${registryNote}`);

@@ -202,6 +202,15 @@
             "type": "string",
             "minLength": 1
           },
+          "backing": {
+            "description": "repo 内に裏付け (municipalities/<県>/<handle>/web.yaml) を持たない代表実測だけが宣言する。external = 観測は実在するが記録が repo の外にある。web.yaml が無いのに backing が無ければ validate は落ちる。",
+            "enum": ["external"]
+          },
+          "backing_note": {
+            "description": "backing: external の根拠と観測日。backing とセットで必須。",
+            "type": "string",
+            "minLength": 1
+          },
           "signals_seen": {
             "description": "その自治体で確認した signal。method で観測 (html/header/asset_fetch) と推定 (inferred_from_status) を区別する。",
             "type": "array",

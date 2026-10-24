@@ -98,3 +98,27 @@ export function representativeDivergenceErrors(web, families) {
   }
   return errors;
 }
+
+/**
+ * 代表実測の裏付け。measured_representatives の側から回す (municipalities/ を回ると、ディレクトリを持たない handle が素通りする)。
+ * webs: Map<handle, web> (repo 内の web.yaml)。
+ *   - web.yaml がある代表は、その family_id が一致するか family_divergence を持つ (representativeDivergenceErrors と対)。backing は不要 (web.yaml が裏付け)。
+ *   - web.yaml が無い代表は backing: external と backing_note (根拠と観測日) が必須。無ければ落とす。
+ */
+export function representativeBackingErrors(families, webs) {
+  const errors = [];
+  for (const f of families.values()) {
+    for (const m of f.measured_representatives ?? []) {
+      const at = `${f.id} の代表実測 ${m.handle}`;
+      const web = webs.get(m.handle);
+      if (web) {
+        if (web.family_id !== f.id && !web.family_divergence) errors.push(`${at}: web.yaml の family_id (${web.family_id}) が一致しない`);
+      } else if (m.backing !== 'external') {
+        errors.push(`${at}: repo 内に web.yaml が無く、backing: external の宣言も無い (裏付けのない代表実測は置けない)`);
+      }
+      if (m.backing && !m.backing_note) errors.push(`${at}: backing に backing_note (根拠と観測日) が無い`);
+      if (!m.backing && m.backing_note) errors.push(`${at}: backing_note があるのに backing が無い`);
+    }
+  }
+  return errors;
+}

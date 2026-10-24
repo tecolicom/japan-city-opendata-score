@@ -4,7 +4,7 @@
 
 **この手順書が前提にする事実 (2026-10-24 時点):**
 
-- **`npm run validate` はレジストリ (`municipalities.yaml`) を必須とし、見つからなければ落ちる。** handle の実在と、`web.yaml` の `url` とレジストリ `website` の整合を検査する。レジストリは `--registry <path>` > 環境変数 `REGISTRY_PATH` > 隣の `../city-tecoli-data/municipalities/municipalities.yaml` の順で探す。CI も同じ (レジストリを checkout して `REGISTRY_PATH` で渡す)。以前は `--registry` を付けたときだけ効き、CI は付けておらず検査が素通りしていた (4 回目の「配線されていない検査」。Ruling AL で直した)
+- **`npm run validate` はレジストリ (`municipalities.yaml`) を必須とし、見つからなければ落ちる。** handle の実在と、`web.yaml` の `url` とレジストリ `website` の整合を検査する。レジストリは `--registry <path>` > 環境変数 `REGISTRY_PATH` > 隣の `../city-tecoli-data/municipalities/municipalities.yaml` の順で探す。CI もレジストリを checkout して `REGISTRY_PATH` で渡すが、**現状、公開されているレジストリ (`origin/main`) には `website` が無い (0/1,786 件。`website` を足したコミットは未 push) ため、CI では URL 照合が働かない。** レジストリが全件 `website` 無しなら validate は落ちる (黙ってスキップしない)。`website` 入りのレジストリが公開されるまでは、手元 (隣の `../city-tecoli-data/`) の validate だけが URL 照合を行う。出力の「URL 照合 実施 N 件・未実施 M 件」で確かめる
 - 足場と指紋採取は `make new HANDLE=<h>` / `make fingerprint PREF=<県> HANDLES=a,b` でも呼べる (実体は `npm run`)
 - 取得結果のキャッシュ (`cache/`) は git 管理外で共有されない。**クローンした直後は空で、初回は実際に取得が発生する。** だから取得の礼儀の制約がある (これは正常。`politeFetch` が robots を確認して取得し、キャッシュを作る)。
 
@@ -63,7 +63,7 @@ make new HANDLE=ogose-town       # または npm run new -- --handle ogose-town
 
 - 埼玉だけでも `www.city.saitama.jp` / `www.city.kawagoe.saitama.jp` / `www.city.kumagaya.lg.jp` とばらばらで、**`lg.jp` ですらない自治体が多数**
 - 「`city.<label>.lg.jp` のはず」と組み立てて 3 件とも取得できなかった実例がある (この repo の最初の実行)。`www.` の有無も一定でない
-- `website` が空の自治体は `no-verified-url` で止まる。現状 (1,786 件すべてに URL がある) そういう自治体は無い。**将来出たら推測しない。`web.yaml` を作らず、未解決として記録して相談する**
+- `website` が空の自治体は `no-verified-url` で止まる。手元のレジストリ (`website` 入り) では 1,786 件すべてに URL があり、そういう自治体は無い。**将来出たら推測しない。`web.yaml` を作らず、未解決として記録して相談する**
 
 ### レジストリの website が古いとき
 
@@ -200,11 +200,14 @@ npm run validate
 
 ### 「検査を書いた」と「検査が走っている」は別
 
-この repo で最も再発した失敗。**3 回**起きた:
+この repo で最も再発した失敗。**6 回**起きた:
 
 1. `validate.mjs` がファイル名順に `web.yaml` を後で読み、継承の検査が**一度も効いていなかった**
 2. 依存が無いと検査が**黙ってスキップ**されていた
 3. 検査が**テストからしか呼ばれず**、`validate` 単体では効かなかった
+4. レジストリ照合が `--registry` を付けたときだけ効き、CI は付けておらず**素通りしていた**
+5. 代表実測の照合が `municipalities/` を回る形で、**ディレクトリを持たない handle は一つの検査も通らなかった** (架空の代表実測から `inherited` しても通った)。`measured_representatives` の側から回す形に直した
+6. レジストリに `website` が無いと URL 照合を**黙ってスキップ**し、それでも「レジストリ照合あり」と表示した。全件 `website` 無しなら落とし、照合の実施/未実施の件数を出す形に直した
 
 **検査・段階表・schema の規則を足したら、壊したデータで実際にゲートが落ちることを確認する。** テストが落ちることではなく、**`npm run validate` (と `npm test`) が落ちること**を。手順:
 

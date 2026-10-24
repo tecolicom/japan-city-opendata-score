@@ -1,7 +1,7 @@
 import { test } from 'node:test';
-import { copySchemaWithMiniProfile } from './_helpers.mjs';
+import { copySchemaWithMiniProfile, copyFamiliesExternal } from './_helpers.mjs';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, cpSync, symlinkSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, cpSync, existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -272,7 +272,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const runValidate = (profiles) => {
   const tmp = mkdtempSync(join(tmpdir(), 'jpdi-prof-'));
   copySchemaWithMiniProfile(root, tmp);
-  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  copyFamiliesExternal(root, tmp);
   for (const [rel, body] of Object.entries(profiles)) {
     mkdirSync(dirname(join(tmp, 'schema', 'profiles', rel)), { recursive: true });
     writeFileSync(join(tmp, 'schema', 'profiles', rel), body);
@@ -461,7 +461,8 @@ test('G=0 の行の notes に根拠の範囲 (フィードのエンドポイン�
 // 配線の確認 (変異): 実物の repo を丸ごと写して壊し、validate.mjs (テストの関数ではなくゲート本体) が落ちること
 const mutate = (edit) => {
   const tmp = mkdtempSync(join(tmpdir(), 'jpdi-mut-'));
-  for (const d of ['schema', 'families', 'municipalities']) cpSync(join(root, d), join(tmp, d), { recursive: true });
+  for (const d of ['schema', 'municipalities']) cpSync(join(root, d), join(tmp, d), { recursive: true });
+  copyFamiliesExternal(root, tmp);
   edit(tmp);
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--no-registry'], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout };

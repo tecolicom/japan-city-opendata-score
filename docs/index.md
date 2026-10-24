@@ -113,7 +113,8 @@ F / G は動的プロファイル (§7) にのみ存在する。**静的領域�
 運用規則:
 
 - **`inherited` は assessment ファイルに書いてよい。** ただし `inherited_from: {family_id, representative_handle}` を必ず伴う。`inherited` を持てるのは A / F / G のキーだけ。
-- **禁じているのは、調べていない自治体の assessment ファイルを一括で機械生成すること。** family 所属を確認した配信元について、継承したと明示的に記録するのは正当な測定行為で、両者は別物。設計書 §5.5 の「機械生成しない」は一括生成の禁止であって、個別の `inherited` 記録の禁止ではない。
+- **禁じているのは、調べていない自治体の assessment ファイルを一括で機械生成すること。** family 所属を確認した配信元について、継承したと明示的に記録するのは正当な測定行為で、両者は別物。「機械生成しない」という規則は一括生成の禁止であって、個別の `inherited` 記録の禁止ではない。
+- **代表実測は repo 内に裏付け (`municipalities/<県>/<handle>/web.yaml`) を持つのが原則。** 例外は `backing: external` と `backing_note` (根拠と観測日) を宣言した代表実測だけで、宣言が無ければ `npm run validate` が落ちる。不備を黙って通さず「宣言されたもの」にするための規則 (`families/*.yaml`、`scripts/_lib/family-check.mjs`)。
 - family 所属は基盤レジストリ (自治体ごとの web 基盤を記録する層。`web.yaml`) に持つ。assessment を置いていない配信元の A / F / G は、利用側がそこから導出できる。
 
 ### 集計の規則
@@ -145,7 +146,7 @@ A 軸と F 軸の値は測定地点に依存する (国外 IP からだけ 403 �
 
 - **静的領域プロファイルの段階表は `japan-gomi-data/docs/opendata-quality-index.md` を参照する。** 現状のまま残し、本書のコアを参照する側とする。**ごみ側の再採点は行わない。** 既存スコアは定義を変えずに本体系に取り込まれる。
 - 段階表の実装が 2 repo に分かれるとドリフトするため、`score.mjs` はコア部分の算出のみを担い、段階表はプロファイル定義から読む。
-- 領域とプロファイルの対応は `schema/domains.yaml` の `profile` が持つ 。値の列挙は `schema/domains.yaml` と `schema/domains.schema.json` が正典で、ここでは重複して定義しない。
+- 領域とプロファイルの対応は `schema/domains.yaml` の `profile` が持つ。値の列挙は `schema/domains.yaml` と `schema/domains.schema.json` が正典で、ここでは重複して定義しない。
 
 ## 7. 動的プロファイルの追加軸 (F・G)
 

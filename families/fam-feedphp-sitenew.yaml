@@ -52,6 +52,12 @@ measured_representatives:
   - handle: hidaka
     observed_at: "2026-10-23"
     evidence: "トップページ HTML の実地取得"
+    backing: external
+    backing_note: >-
+      controller が 2026-10-23 にトップページを取得し、`<!-- CMS編集領域ここから -->` /
+      `/theme/base/js/mutual_switching/` / `/index.update.json` の 3 本を確認した。
+      repo 内に municipalities/saitama/hidaka/web.yaml が無い。裏付けは controller の 2026-10-23 の観測のみ
+      (裏付けの作成には外部取得が要り、保留中)。
     signals_seen:
       - signal: /theme/base/js/mutual_switching/
         method: html

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
-import { copySchemaWithMiniProfile } from './_helpers.mjs';
+import { copySchemaWithMiniProfile, copyFamiliesExternal } from './_helpers.mjs';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
@@ -226,7 +226,7 @@ test('signals_seen の同じ signal の二重記載は method が違ってもエ
 const runValidate = (files) => {
   const tmp = mkdtempSync(join(tmpdir(), 'jpdi-'));
   copySchemaWithMiniProfile(root, tmp);
-  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  copyFamiliesExternal(root, tmp);
   for (const [rel, body] of Object.entries(files)) {
     mkdirSync(dirname(join(tmp, rel)), { recursive: true });
     writeFileSync(join(tmp, rel), body);

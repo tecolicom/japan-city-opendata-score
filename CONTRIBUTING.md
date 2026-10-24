@@ -37,7 +37,7 @@ npm run validate
 npm test
 ```
 
-`validate` はレジストリ (隣の `../city-tecoli-data/`、別の場所なら環境変数 `REGISTRY_PATH`) を必須とし、handle の実在と公式サイト URL の整合を検査します。レジストリが無ければ落ちます。CI も同じ検査をします。
+`validate` はレジストリ (隣の `../city-tecoli-data/`、別の場所なら環境変数 `REGISTRY_PATH`) を必須とし、handle の実在と公式サイト URL の整合を検査します。レジストリが無ければ落ちます。CI でも走りますが、公開レジストリが `website` を持つまでは URL 照合は手元でしか働きません (`docs/playbook.md`)。
 
 エージェントに任せるなら [`AGENTS.md`](AGENTS.md) を読ませてください。
 

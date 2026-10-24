@@ -1,8 +1,8 @@
 import { test } from 'node:test';
-import { copySchemaWithMiniProfile } from './_helpers.mjs';
+import { copySchemaWithMiniProfile, copyFamiliesExternal } from './_helpers.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,7 @@ test('webUrlErrors: レジストリと同じ URL (正規化して比較) は通�
 const run = (web, registry) => {
   const tmp = mkdtempSync(join(tmpdir(), 'webu-'));
   copySchemaWithMiniProfile(root, tmp);
-  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  copyFamiliesExternal(root, tmp);
   mkdirSync(join(tmp, 'municipalities/saitama/kawagoe'), { recursive: true });
   writeFileSync(join(tmp, 'municipalities/saitama/kawagoe/web.yaml'), web);
   writeFileSync(join(tmp, 'reg.yaml'), registry);
@@ -46,7 +46,7 @@ const web = (extra, h = 'kawagoe') => `handle: ${h}\nurl: https://www.city.examp
 const runAt = (h, body) => {
   const tmp = mkdtempSync(join(tmpdir(), 'webd-'));
   copySchemaWithMiniProfile(root, tmp);
-  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  copyFamiliesExternal(root, tmp);
   mkdirSync(join(tmp, `municipalities/saitama/${h}`), { recursive: true });
   writeFileSync(join(tmp, `municipalities/saitama/${h}/web.yaml`), body);
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--no-registry'], { encoding: 'utf8' });
@@ -75,7 +75,7 @@ test('AD: 代表実測に載っている handle が family と食い違うなら
 const gate = (args, env = {}) => {
   const tmp = mkdtempSync(join(tmpdir(), 'webg-'));
   copySchemaWithMiniProfile(root, tmp);
-  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  copyFamiliesExternal(root, tmp);
   mkdirSync(join(tmp, 'municipalities/saitama/kawagoe'), { recursive: true });
   writeFileSync(join(tmp, 'municipalities/saitama/kawagoe/web.yaml'), base);
   writeFileSync(join(tmp, 'reg.yaml'), reg('https://www.city.hanno.lg.jp'));
