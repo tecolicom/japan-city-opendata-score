@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { loadYaml } from './_lib/lib.mjs';
+import { familySemanticErrors } from './_lib/family-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const schemaDir = join(root, 'schema');
@@ -19,7 +20,7 @@ addFormats(ajv);
 const listFiles = (dir) => readdirSync(dir).filter((n) => !n.startsWith('.')).sort();
 
 function schemaErrors(validate, data, label) {
-  return validate(data) ? [] : validate.errors.map((e) => `${label}${e.instancePath} ${e.message}`);
+  return validate(data) ? [] : validate.errors.map((e) => `${label}${e.instancePath} ${e.message} (${e.schemaPath})`);
 }
 
 function checkDomains() {
@@ -40,16 +41,18 @@ function checkDomains() {
 
 function checkFamilies() {
   if (!existsSync(familiesDir)) return ['families/: 見つからない'];
-  const files = listFiles(familiesDir).filter((n) => /\.ya?ml$/i.test(n));
-  if (files.length === 0) return ['families/: family が 1 件も無い'];
+  const all = listFiles(familiesDir);
+  const files = all.filter((n) => /\.ya?ml$/i.test(n));
+  const errors = all.filter((n) => !files.includes(n)).map((n) => `families/${n}: yaml ではないファイル (対応する検証が未実装)`);
+  if (files.length === 0) return [...errors, 'families/: family が 1 件も無い'];
   const validate = ajv.compile(loadYaml(join(schemaDir, 'family.schema.json')));
-  const errors = [];
   const ids = new Set();
   for (const name of files) {
     const family = loadYaml(join(familiesDir, name));
     const errs = schemaErrors(validate, family, `families/${name}`);
     errors.push(...errs);
     if (errs.length > 0) continue;
+    errors.push(...familySemanticErrors(family).map((e) => `families/${name}: ${e}`));
     if (family.id !== name.replace(/\.ya?ml$/i, '')) errors.push(`families/${name}: id (${family.id}) がファイル名と一致しない`);
     if (ids.has(family.id)) errors.push(`families/${name}: id が重複: ${family.id}`);
     ids.add(family.id);

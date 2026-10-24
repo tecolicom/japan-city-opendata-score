@@ -21,17 +21,68 @@ feed_patterns:
 sync_kind: append
 reachability:
   overseas_rest: unknown   # 未観測。「遮断なし」(not_blocked) ではない
+# 4 自治体は同等ではない。根拠の強さは evidence を読むこと。
 measured_representatives:
-  - hanno
-  - hidaka
-  - iruma
-  - moroyama-town
+  - handle: hanno
+    observed_at: "2026-10-12"
+    evidence: "トップページ HTML (Internet Archive 2026-10-12 のスナップショット) と、/resource/js/foot_print.js の直接取得"
+    signals_seen:
+      - /cgi-bin/feed.php?siteNew=
+      - /news_list.html
+      - /theme/base/js/mutual_switching/
+      - /index.update.json
+      - /resource/js/foot_print.js
+  - handle: iruma
+    observed_at: "2026-10-23"
+    evidence: "トップページ HTML の実地取得"
+    signals_seen:
+      - /cgi-bin/feed.php?siteNew=
+      - /news_list.html
+      - /theme/base/js/mutual_switching/
+      - /index.update.json
+  - handle: hidaka
+    observed_at: "2026-10-23"
+    evidence: "トップページ HTML の実地取得"
+    signals_seen:
+      - /theme/base/js/mutual_switching/
+      - /index.update.json
+      - "<!-- CMS編集領域ここから -->"
+  - handle: moroyama-town
+    observed_at: "2026-10-23"
+    # 弱い根拠: HTML から直接取れた signal は mutual_switching の 1 本だけ。
+    # min_signals: 2 を満たすのは、feed.php が 502 を返す (= エンドポイントが存在する) ことを 1 本と数えた場合に限る。
+    evidence: "トップページ HTML の実地取得。加えて /cgi-bin/feed.php?siteNew=... が 502 を返す (= エンドポイントが存在する。非該当の tokorozawa / sayama / chichibu は 404)"
+    signals_seen:
+      - /theme/base/js/mutual_switching/
+      - /cgi-bin/feed.php?siteNew=
 known_incidents:
   - started_at: "2026-10-21"
     ended_at: null
     summary: feed.php が 502 で停止。複数自治体で同時に発生した。
-    affected: [hanno, hidaka, iruma, moroyama-town]
+    affected:
+      - handle: hanno
+        observed_at: "2026-10-23"
+        evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+      - handle: hidaka
+        observed_at: "2026-10-23"
+        evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+      - handle: iruma
+        observed_at: "2026-10-23"
+        evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+      - handle: moroyama-town
+        observed_at: "2026-10-23"
+        evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
     cause_status: unconfirmed
     suspected_factors:
-      - PHP CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2、未認証 RCE、修正版公開 2026-10-21 14:00 UTC) と時系列が重なる
-    # 因果は未確認。自治体も CMS ベンダーも理由を公表していない。
+      - summary: PHP CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2、未認証 RCE、修正版公開 2026-10-21 14:00 UTC) と時系列が重なる。因果は未確認
+        sources:
+          - url: https://www.php.net/
+            confirmed_at: "2026-10-23"
+            advisory: GHSA-w8hw-w9fx-j79w
+          - url: https://www.php.net/
+            confirmed_at: "2026-10-23"
+            advisory: GHSA-6wmf-4rv5-p3rp
+    cause_search:
+      searched_at: "2026-10-23"
+      scope: 飯能市公式サイトおよび当該 CMS に関する告知
+      result: 確認した範囲では原因を述べた告知を見つけられなかった (公表の不在を断定するものではない)

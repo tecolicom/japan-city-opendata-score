@@ -4,7 +4,14 @@
   "title": "自治体 web 基盤の CMS 系統 (family)",
   "description": "同じ製品なら取得口の形も罠も同じ、という前提で代表実測を群へ展開するための単位。製品名が未特定でも、指紋 (signals) だけで群として成立する。",
   "type": "object",
-  "required": ["id", "product", "signals", "sync_kind", "reachability", "measured_representatives"],
+  "required": [
+    "id",
+    "product",
+    "signals",
+    "sync_kind",
+    "reachability",
+    "measured_representatives"
+  ],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -15,26 +22,50 @@
     "aliases": {
       "type": "array",
       "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "product": {
       "description": "製品名。未特定は null (空文字は不可)。null は特例ではなく通常の値。",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "minLength": 1
     },
     "version": {
       "description": "製品のバージョン。持つなら observed_at と evidence が必須。",
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "minLength": 1
     },
-    "observed_at": { "type": ["string", "null"], "format": "date" },
-    "evidence": { "type": ["string", "null"], "minLength": 1 },
+    "observed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "evidence": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
     "signals": {
       "description": "HTML 本文または応答ヘッダに現れる痕跡の文字列。scripts/fingerprint.mjs が読む。",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "min_signals": {
       "description": "family と判定するのに要る痕跡の本数。省略時は 2。",
@@ -45,70 +76,320 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "format"],
+        "required": [
+          "path",
+          "format"
+        ],
         "additionalProperties": false,
         "properties": {
-          "path": { "type": "string", "minLength": 1 },
-          "format": { "type": "string", "minLength": 1 },
-          "date_field": { "type": "string", "minLength": 1 }
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "type": "string",
+            "minLength": 1
+          },
+          "date_field": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
-    "sync_kind": { "enum": ["append", "snapshot", "unknown"] },
+    "sync_kind": {
+      "enum": [
+        "append",
+        "snapshot",
+        "unknown"
+      ]
+    },
     "reachability": {
       "type": "object",
-      "required": ["overseas_rest"],
+      "required": [
+        "overseas_rest"
+      ],
       "additionalProperties": false,
       "properties": {
         "overseas_rest": {
           "description": "国外 IP からの到達性。unknown は未観測、not_blocked は観測のうえ遮断なし。",
-          "enum": ["unknown", "not_blocked", "blocked", "partial"]
+          "enum": [
+            "unknown",
+            "not_blocked",
+            "blocked",
+            "partial"
+          ]
         },
-        "observed_from": { "enum": ["jp", "overseas-ci"] },
-        "notes": { "type": "string", "minLength": 1 }
-      }
+        "observed_from": {
+          "enum": [
+            "jp",
+            "overseas-ci"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "overseas_rest": {
+                "not": {
+                  "const": "unknown"
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "observed_from",
+              "observed_at"
+            ],
+            "properties": {
+              "observed_from": true,
+              "observed_at": true
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "overseas_rest": {
+                "const": "partial"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "notes"
+            ],
+            "properties": {
+              "notes": true
+            }
+          }
+        }
+      ]
     },
     "measured_representatives": {
-      "description": "この family を実測した自治体の handle。",
+      "description": "この family を実測した自治体。どの signal を、いつ、何で確認したかを必ず持つ。signals_seen は signals の部分集合 (scripts/_lib/family-check.mjs で検査)。",
       "type": "array",
       "minItems": 1,
-      "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" }
+      "items": {
+        "type": "object",
+        "required": [
+          "handle",
+          "observed_at",
+          "evidence",
+          "signals_seen"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date"
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "signals_seen": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
     },
     "known_incidents": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["started_at", "ended_at", "summary", "affected", "cause_status"],
+        "required": [
+          "started_at",
+          "ended_at",
+          "summary",
+          "affected",
+          "cause_status"
+        ],
         "additionalProperties": false,
         "properties": {
-          "started_at": { "type": "string", "format": "date" },
-          "ended_at": { "description": "継続中・未確認は null。", "type": ["string", "null"], "format": "date" },
-          "summary": { "type": "string", "minLength": 1 },
+          "started_at": {
+            "type": "string",
+            "format": "date"
+          },
+          "ended_at": {
+            "description": "継続中・未確認は null。",
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
           "affected": {
+            "description": "影響を確認した自治体。確認日と根拠を持つ。",
             "type": "array",
             "minItems": 1,
-            "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" }
+            "items": {
+              "type": "object",
+              "required": [
+                "handle",
+                "observed_at",
+                "evidence"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "handle": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "evidence": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
           },
-          "cause_status": { "enum": ["unconfirmed", "confirmed"] },
+          "cause_status": {
+            "enum": [
+              "unconfirmed",
+              "confirmed"
+            ]
+          },
           "suspected_factors": {
-            "description": "時系列の重なり等で疑われる要因。因果の主張ではない。",
+            "description": "時系列の重なり等で疑われる要因。因果の主張ではない。出典を必ず持つ。",
             "type": "array",
-            "items": { "type": "string", "minLength": 1 }
+            "items": {
+              "type": "object",
+              "required": [
+                "summary",
+                "sources"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "summary": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sources": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "url",
+                      "confirmed_at"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "confirmed_at": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "advisory": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
-          "cause_evidence": { "type": "string", "minLength": 1 }
+          "cause_evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cause_search": {
+            "description": "原因の公表を探した範囲。不在の主張は範囲と日付を限定して書く。",
+            "type": "object",
+            "required": [
+              "searched_at",
+              "scope",
+              "result"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "searched_at": {
+                "type": "string",
+                "format": "date"
+              },
+              "scope": {
+                "type": "string",
+                "minLength": 1
+              },
+              "result": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         },
-        "if": { "properties": { "cause_status": { "const": "confirmed" } } },
-        "then": { "required": ["cause_evidence"], "properties": { "cause_evidence": true } }
+        "if": {
+          "properties": {
+            "cause_status": {
+              "const": "confirmed"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "cause_evidence"
+          ],
+          "properties": {
+            "cause_evidence": true
+          }
+        }
       }
     }
   },
-  "if": { "properties": { "version": { "type": "string" } }, "required": ["version"] },
-  "then": {
-    "required": ["observed_at", "evidence"],
+  "if": {
     "properties": {
-      "observed_at": { "type": "string" },
-      "evidence": { "type": "string" }
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "version"
+    ]
+  },
+  "then": {
+    "required": [
+      "observed_at",
+      "evidence"
+    ],
+    "properties": {
+      "observed_at": {
+        "type": "string"
+      },
+      "evidence": {
+        "type": "string"
+      }
     }
   }
 }

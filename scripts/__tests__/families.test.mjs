@@ -6,6 +6,7 @@ import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { loadYaml } from '../_lib/lib.mjs';
 import { loadFamilies, fingerprint } from '../fingerprint.mjs';
+import { familySemanticErrors } from '../_lib/family-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ajv = new Ajv({ allErrors: true, strict: true });
@@ -42,7 +43,7 @@ test('version を持つなら observed_at と evidence が必須', () => {
 });
 
 test('既知 family は 4 自治体を代表実測として挙げる', () => {
-  assert.deepEqual([...f.measured_representatives].sort(),
+  assert.deepEqual(f.measured_representatives.map((m) => m.handle).sort(),
     ['hanno', 'hidaka', 'iruma', 'moroyama-town']);
 });
 
@@ -50,7 +51,8 @@ test('国外からの遮断は構造化フィールドで持ち、未観測と�
   assert.equal(typeof f.reachability.overseas_rest, 'string');
   assert.equal(f.reachability.overseas_rest, 'unknown');
   for (const v of ['unknown', 'not_blocked', 'blocked', 'partial']) {
-    assert.ok(ok({ ...f, reachability: { overseas_rest: v } }), v);
+    const extra = v === 'unknown' ? {} : { observed_from: 'overseas-ci', observed_at: '2026-10-23', notes: '一部のみ' };
+    assert.ok(ok({ ...f, reachability: { overseas_rest: v, ...extra } }), v);
   }
   assert.ok(!ok({ ...f, reachability: { overseas_rest: null } }));
   assert.ok(!ok({ ...f, reachability: { overseas_rest: 'maybe' } }));
@@ -83,4 +85,47 @@ test('必須キー欠落・未知キー・signals 空を落とす', () => {
   assert.ok(!ok({ ...f, signals: [] }));
   assert.ok(!ok({ ...f, sync_kind: 'whatever' }));
   assert.ok(!ok({ ...f, min_signals: 0 }));
+});
+
+const rep = f.measured_representatives[0];
+
+test('代表実測は日付と根拠と確認した signal を持つ', () => {
+  for (const k of ['observed_at', 'evidence', 'signals_seen']) {
+    assert.ok(!ok({ ...f, measured_representatives: [without(rep, k)] }), k);
+  }
+  assert.ok(!ok({ ...f, measured_representatives: [{ ...rep, handle: 'x', evidence: '' }] }));
+  assert.ok(!ok({ ...f, measured_representatives: ['hanno'] }), '裸の handle は不可');
+});
+
+test('moroyama-town は直接取得が 1 本で、弱い根拠であることが evidence に残る', () => {
+  const m = f.measured_representatives.find((x) => x.handle === 'moroyama-town');
+  assert.match(m.evidence, /502/);
+  assert.match(m.evidence, /エンドポイントが存在する/);
+});
+
+test('signals_seen は signals の部分集合', () => {
+  assert.deepEqual(familySemanticErrors(f), []);
+  const bad = { ...f, measured_representatives: [{ ...rep, signals_seen: ['/typo.js'] }] };
+  assert.equal(familySemanticErrors(bad).length, 1);
+});
+
+test('overseas_rest が unknown 以外なら observed_from と observed_at が必須、partial は notes も', () => {
+  const r = (x) => ok({ ...f, reachability: x });
+  assert.ok(!r({ overseas_rest: 'not_blocked' }));
+  assert.ok(!r({ overseas_rest: 'not_blocked', observed_from: 'overseas-ci' }));
+  assert.ok(!r({ overseas_rest: 'blocked', observed_at: '2026-10-23' }));
+  assert.ok(r({ overseas_rest: 'not_blocked', observed_from: 'overseas-ci', observed_at: '2026-10-23' }));
+  assert.ok(!r({ overseas_rest: 'partial', observed_from: 'jp', observed_at: '2026-10-23' }));
+  assert.ok(r({ overseas_rest: 'partial', observed_from: 'jp', observed_at: '2026-10-23', notes: '画像のみ遮断' }));
+  assert.ok(r({ overseas_rest: 'unknown' }));
+});
+
+test('障害の影響自治体と疑い要因は根拠・出典を持ち、不在の主張は範囲と日付を限定する', () => {
+  const inc = f.known_incidents[0];
+  assert.ok(inc.affected.every((a) => a.observed_at && a.evidence));
+  assert.ok(!ok({ ...f, known_incidents: [{ ...inc, affected: ['hanno'] }] }));
+  assert.ok(!ok({ ...f, known_incidents: [{ ...inc, suspected_factors: [{ summary: 'x' }] }] }), '出典なしは不可');
+  assert.ok(inc.suspected_factors[0].sources.some((s) => s.url.startsWith('https://www.php.net/')));
+  assert.equal(inc.cause_search.searched_at, '2026-10-23');
+  assert.doesNotMatch(JSON.stringify(inc), /公表していない/);
 });
