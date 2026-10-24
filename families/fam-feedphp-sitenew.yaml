@@ -1,0 +1,37 @@
+# 飯能市・日高市・入間市・毛呂山町が共有する CMS 系統。製品名は未特定。
+# id は指紋 (feed.php?siteNew=) 由来の仮 id。製品名が判明したら aliases に足す (id は変えない)。
+id: fam-feedphp-sitenew
+aliases: []
+product: null
+version: null
+observed_at: null
+evidence: null
+min_signals: 2
+signals:
+  - /cgi-bin/feed.php?siteNew=
+  - /index.update.json
+  - /news_list.html
+  - /theme/base/js/mutual_switching/
+  - /resource/js/foot_print.js
+  - "<!-- CMS編集領域ここから -->"
+feed_patterns:
+  - path: "/cgi-bin/feed.php?siteNew=1&displayCount={n}&displayRange={days}&includeShortcut={0|1}"
+    format: RSS 1.0 (RDF)
+    date_field: dc:date
+sync_kind: append
+reachability:
+  overseas_rest: unknown   # 未観測。「遮断なし」(not_blocked) ではない
+measured_representatives:
+  - hanno
+  - hidaka
+  - iruma
+  - moroyama-town
+known_incidents:
+  - started_at: "2026-10-21"
+    ended_at: null
+    summary: feed.php が 502 で停止。複数自治体で同時に発生した。
+    affected: [hanno, hidaka, iruma, moroyama-town]
+    cause_status: unconfirmed
+    suspected_factors:
+      - PHP CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2、未認証 RCE、修正版公開 2026-10-21 14:00 UTC) と時系列が重なる
+    # 因果は未確認。自治体も CMS ベンダーも理由を公表していない。

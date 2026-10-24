@@ -10,7 +10,7 @@
   },
   "scripts": {
     "validate": "node scripts/validate.mjs",
-    "test": "node scripts/validate.mjs && eslint scripts && node --test scripts/_lib/lib.test.mjs scripts/_lib/fetch.test.mjs scripts/__tests__/domains.test.mjs scripts/__tests__/fingerprint.test.mjs",
+    "test": "node scripts/validate.mjs && eslint scripts && node --test scripts/_lib/lib.test.mjs scripts/_lib/fetch.test.mjs scripts/__tests__/domains.test.mjs scripts/__tests__/families.test.mjs scripts/__tests__/fingerprint.test.mjs",
     "lint": "eslint scripts",
     "score": "node scripts/score.mjs",
     "fingerprint": "node scripts/fingerprint.mjs",
