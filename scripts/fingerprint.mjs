@@ -4,9 +4,14 @@
 // 判定規則はコードに持たない。`families/<id>.yaml` の `signals` (痕跡の文字列) と
 // `min_signals` (当たりとみなす本数) が正典で、ここはそれを読んで数えるだけ。
 import { existsSync, readdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadYaml } from './_lib/lib.mjs';
+import { thresholdBasis } from './_lib/family-check.mjs';
+import { politeFetch } from './_lib/fetch.mjs';
+import { DEFAULT_REGISTRY, loadRecords, prefDirOf, siteUrlOf } from './_lib/municipality.mjs';
+import { stringify } from 'yaml';
 
 // 既定は repo ルートの families/。cwd 相対にすると、repo ルート以外から呼ばれたときに
 // 黙って 0 件になり、全自治体が familyId: null になってもエラーが出ない。
@@ -65,4 +70,62 @@ export function fingerprint(html, headers = {}, options = {}) {
   const top = qualified.filter((h) => h.matched.length === best);
   // 同数で並んだら「どちらとも言わない」。推測で family を付けない。
   return { signals, familyId: top.length === 1 ? top[0].id : null };
+}
+
+// ---- CLI ----
+// node scripts/fingerprint.mjs --pref saitama --handles iruma,tokorozawa [--limit N] [--cache cache] [--registry <path>]
+// 取得は politeFetch だけを通す (robots.txt・間隔 2 秒・直列化・キャッシュ)。トップページ 1 URL ずつ。
+// _fetch に渡すのは実リクエストを記録するだけの薄い包みで、礼儀の層は迂回しない。
+async function main() {
+  const argOf = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const pref = argOf('--pref');
+  if (!pref) { console.error('usage: fingerprint --pref <dir> [--handles a,b] [--limit N]'); process.exit(2); }
+  const cacheDir = join(root, argOf('--cache') ?? 'cache');
+  const records = loadRecords(argOf('--registry') ?? DEFAULT_REGISTRY);
+  const wanted = argOf('--handles')?.split(',');
+  let targets = records.filter((r) => r.type !== 'pref' && prefDirOf(r, records) === pref);
+  if (wanted) targets = wanted.map((h) => targets.find((r) => r.handle === h) ?? (() => { throw new Error(`${pref} に ${h} は無い`); })());
+  if (argOf('--limit')) targets = targets.slice(0, Number(argOf('--limit')));
+
+  mkdirSync(cacheDir, { recursive: true });
+  const requestLog = join(cacheDir, 'requests.jsonl');
+  const loggedFetch = async (href, init) => {
+    const t = Date.now();
+    appendFileSync(requestLog, `${JSON.stringify({ t, iso: new Date(t).toISOString(), url: href })}\n`);
+    return fetch(href, init);
+  };
+  const families = loadFamilies();
+  const today = new Date().toISOString().slice(0, 10);
+  const run = [];
+  for (const r of targets) {
+    const url = siteUrlOf(r);
+    if (!url) { run.push({ handle: r.handle, status: 'no-verified-url' }); console.log(`${r.handle}\tno-verified-url`); continue; }
+    const res = await politeFetch(url, { cacheDir, _fetch: loggedFetch });
+    const entry = { handle: r.handle, url, status: res.status, httpStatus: res.httpStatus, fromCache: res.fromCache, finalUrl: res.url, redirects: res.redirects ?? [], reason: res.reason };
+    if (res.status === 'ok') {
+      const { signals, familyId } = fingerprint(res.body, res.headers, { families });
+      const family = families.find((f) => f.id === familyId);
+      const inFamily = family ? signals.filter((s) => family.signals.includes(s)) : [];
+      const signals_seen = inFamily.map((signal) => ({ signal, method: res.body.includes(signal) ? 'html' : 'header' }));
+      const web = {
+        handle: r.handle,
+        family_id: familyId,
+        family_confidence: family ? thresholdBasis(family, { signals_seen }) : 'none',
+        fingerprinted_at: today,
+        signals_seen: family ? signals_seen : [],
+      };
+      const dir = join(root, 'municipalities', pref, r.handle);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'web.yaml'), stringify(web));
+      Object.assign(entry, { familyId, signals, etag: 'etag' in res.headers, lastModified: 'last-modified' in res.headers });
+    }
+    run.push(entry);
+    console.log(JSON.stringify(entry));
+  }
+  writeFileSync(join(cacheDir, `fingerprint-run-${pref}.json`), `${JSON.stringify(run, null, 2)}\n`);
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((e) => { console.error(e); process.exit(1); });
 }
