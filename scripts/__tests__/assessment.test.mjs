@@ -41,9 +41,9 @@ test('publisher id は handle で名前空間化される', () => {
   assert.equal(a.publishers[1].id, 'hanno/lib-main');
   assert.ok(!validatePublisher({ ...pub, id: 'lib-main' }), '名前空間なしは不可');
   assert.ok(!validatePublisher({ ...pub, id: 'hanno/Lib Main' }));
-  const errs = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [{ ...pub, id: 'hidaka/lib-main' }] }, { handle: 'hanno' });
+  const errs = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [{ ...pub, id: 'hidaka/lib-main' }] }, { handle: 'hanno', domains });
   assert.ok(errs.some((e) => /handle/.test(e)), '置かれた handle と id の接頭辞が違えば不可');
-  const dup = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pub, pub] }, { handle: 'hanno' });
+  const dup = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pub, pub] }, { handle: 'hanno', domains });
   assert.ok(dup.some((e) => /重複/.test(e)));
 });
 
@@ -283,4 +283,13 @@ test('validate.mjs: 正しい assessment は通り、壊したものは落ちる
   assert.notEqual(runValidate(noWeb).code, 0, 'web.yaml 無しの inherited');
   assert.notEqual(runValidate({ ...inhFiles, [web]: inhFiles[web].replace('observed', 'below').replace(/signals_seen:[\s\S]*?fingerprinted/, 'signals_seen:\n  - {signal: /news_list.html, method: html}\nfingerprinted') }).code, 0, 'below の inherited');
   assert.notEqual(runValidate({ ...good, [web]: good[web].replace('observed', 'below') }).code, 0, '導出値と違う family_confidence');
+});
+
+// 繰越 (Task 7 レビュー): 依存が渡されていない呼び出しで検査が黙って切れてはならない
+test('依存 (domains / families) が無い呼び出しは、検査をスキップせず失敗する', () => {
+  const p = { ...pubBase, ...DER, inherited_from: inh, axes: { A: 5 }, provenance: { A: 'inherited' } };
+  const call = (pp, ctx) => () => assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pp] }, ctx);
+  assert.throws(call(pubBase, { handle: 'hanno' }), /domains/, 'domains 無しは領域の照合ができない');
+  assert.throws(call(p, { handle: 'hanno', domains }), /families/, 'inherited_from があるのに families 無し');
+  assert.doesNotThrow(call(pubBase, { handle: 'hanno', domains }), 'inherited が無ければ families は要らない');
 });

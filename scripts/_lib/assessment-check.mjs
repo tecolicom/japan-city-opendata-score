@@ -2,11 +2,13 @@
 // (family-check.mjs の先例に倣う)。schema を通った assessment に対して呼ぶ。
 //
 // ctx: { handle }                       … このファイルが置かれた自治体ディレクトリの handle (必須)
-//      { domains }                      … 任意。領域の存在と、axes の profile が領域のプロファイルと一致するかを検査する
-//      { families, web }                … 任意 (families を渡すと継承の検査が有効になる)。
+//      { domains }                      … 必須。領域の存在と、axes の profile が領域のプロファイルと一致するかを検査する
+//      { families, web }                … families は inherited_from を持つ配信元があるとき必須。
 //        web はその自治体の web.yaml (無ければ undefined)。inherited は web.yaml が存在し、
 //        family_id が一致し、family_confidence が observed/inferred のときだけ書ける。
 //        domains: Map<id, {profile}>、families: Map<id, family>
+// 必須の依存が渡されていないときは検査を黙って飛ばさず、TypeError で失敗する
+// (Task 7 で、依存の渡し忘れにより継承の検査が一度も効いていなかった事故の再発防止)。
 
 const AXES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 const DAY = (s) => Date.parse(`${s}T00:00:00Z`);
@@ -14,8 +16,9 @@ const DAY = (s) => Date.parse(`${s}T00:00:00Z`);
 export function assessmentSemanticErrors(a, ctx) {
   const errors = [];
   const { handle } = ctx;
-  const profile = ctx.domains?.get(a.domain)?.profile;
-  if (ctx.domains && !ctx.domains.has(a.domain)) errors.push(`domain が domains.yaml に無い: ${a.domain}`);
+  if (!ctx.domains) throw new TypeError('assessmentSemanticErrors: ctx.domains が必要 (領域とプロファイルの照合を黙って飛ばさない)');
+  const profile = ctx.domains.get(a.domain)?.profile;
+  if (!ctx.domains.has(a.domain)) errors.push(`domain が domains.yaml に無い: ${a.domain}`);
 
   const ids = new Set();
   for (const p of a.publishers ?? []) {
@@ -35,7 +38,7 @@ export function assessmentSemanticErrors(a, ctx) {
       errors.push(`${at}: derived_at が observed_at より前 (導出は観測の後)`);
     }
 
-    if (p.axes && ctx.domains?.has(a.domain)) {
+    if (p.axes && ctx.domains.has(a.domain)) {
       if (profile == null) errors.push(`${at}: 領域 ${a.domain} はプロファイル未判定なので axes を書けない`);
       else if (p.profile !== profile) errors.push(`${at}: profile (${p.profile}) が領域 ${a.domain} のプロファイル (${profile}) と違う`);
     }
@@ -60,17 +63,16 @@ export function assessmentSemanticErrors(a, ctx) {
 
     if (p.inherited_from) {
       if (!Object.values(prov).includes('inherited')) errors.push(`${at}: inherited_from があるのに inherited の軸が無い`);
-      const fam = ctx.families?.get(p.inherited_from.family_id);
-      if (ctx.families) {
-        if (!ctx.web) errors.push(`${at}: inherited だが web.yaml が無い (family 所属を確認していない)`);
-        else {
-          if (ctx.web.family_id !== p.inherited_from.family_id) errors.push(`${at}: inherited_from.family_id が web.yaml の family_id (${ctx.web.family_id}) と違う`);
-          if (!['observed', 'inferred'].includes(ctx.web.family_confidence)) errors.push(`${at}: web.yaml の family_confidence が ${ctx.web.family_confidence} なので inherited は書けない`);
-        }
-        if (!fam) errors.push(`${at}: inherited_from.family_id が families/ に無い: ${p.inherited_from.family_id}`);
-        else if (!fam.measured_representatives.some((m) => m.handle === p.inherited_from.representative_handle)) {
-          errors.push(`${at}: ${p.inherited_from.representative_handle} は ${fam.id} の代表実測ではない`);
-        }
+      if (!ctx.families) throw new TypeError(`assessmentSemanticErrors: ${at} は inherited_from を持つので ctx.families が必要 (継承の検査を黙って飛ばさない)`);
+      const fam = ctx.families.get(p.inherited_from.family_id);
+      if (!ctx.web) errors.push(`${at}: inherited だが web.yaml が無い (family 所属を確認していない)`);
+      else {
+        if (ctx.web.family_id !== p.inherited_from.family_id) errors.push(`${at}: inherited_from.family_id が web.yaml の family_id (${ctx.web.family_id}) と違う`);
+        if (!['observed', 'inferred'].includes(ctx.web.family_confidence)) errors.push(`${at}: web.yaml の family_confidence が ${ctx.web.family_confidence} なので inherited は書けない`);
+      }
+      if (!fam) errors.push(`${at}: inherited_from.family_id が families/ に無い: ${p.inherited_from.family_id}`);
+      else if (!fam.measured_representatives.some((m) => m.handle === p.inherited_from.representative_handle)) {
+        errors.push(`${at}: ${p.inherited_from.representative_handle} は ${fam.id} の代表実測ではない`);
       }
     }
   }
