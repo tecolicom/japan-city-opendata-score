@@ -17,6 +17,28 @@
 
 情報領域の語彙は、デジタル庁の**自治体標準オープンデータセット** (基本編 14 + 応用編 8) を骨格とし、標準に無いもの (ごみ収集など) を拡張として足す。
 
+### 国内の先行事例との関係
+
+国内には既に、全国の自治体サイトを**実測して**公開している仕事がある。本 index はそれと重ならない。
+
+| 先行事例 | 何を測るか | 測り方 |
+|---|---|---|
+| [code4fukui/localgovjp](https://github.com/code4fukui/localgovjp) (CC0) | 全自治体の一覧・公式サイト URL・位置 | 機械的に悉皆。**本 index が `website` の出典として使っている** |
+| [code4fukui/opendatacity](https://github.com/code4fukui/opendatacity) (MIT) | **SSL 対応率・ドメイン・`.lg.jp` 採用**、プログラミング教育対応 | 全自治体を機械的に悉皆測定し、ダッシュボードで可視化 |
+| デジタル庁 [オープンデータ取組済自治体一覧](https://data.e-gov.go.jp/data/dataset/digi_20220315_0064) | 取組済か否かの**二値** | 自治体からの報告 |
+| デジタル庁 [オープンデータ取組の質評価指標 (ベータ版)](https://www.digital.go.jp/resources/open_data/materials-for-learning/) | 推進体制 / 公開範囲 / 運用 / データ品質 / 共創・連携 の **5 観点** | **自治体の自己評価** (Excel) |
+| デジタル庁 [自治体標準オープンデータセット](https://www.digital.go.jp/resources/data_dataset) | — (形式の標準。評価指標ではない) | — |
+
+**空いているのは「その情報を実際に使えるか」である。**
+
+- `opendatacity` は**実測だが技術属性**を測る。サイトが https か、どのドメインか。「イベント情報が機械可読で取れるか」は測らない
+- デジタル庁の質評価指標は**多面的だが自己評価**で、観点も組織・運用 (推進体制、共創・連携) が中心。使う側から見た取得可能性ではない
+- 取組済自治体一覧は**粒度がゼロ** (約 74% が「取組済」)
+
+本 index は **実測かつ情報の使用可能性**を、**情報領域ごと**に測る。先行事例と競合せず、その隣に置かれるものである。
+
+**上流への還元:** 実測で `localgovjp` 由来の公式 URL に古いもの (404) を 1 件見つけた (`municipalities/saitama/moroyama-town/web.yaml` に記録)。この種の食い違いは、見つけたら上流に戻すのが筋である。
+
 ## 中核の原則
 
 **測っていない値を、測った値のように見せない。** これは標語ではなく、schema が構造で強制する:
@@ -108,6 +130,8 @@ make help    # コマンド一覧
 
 - [tecolicom/japan-gomi-data](https://github.com/tecolicom/japan-gomi-data) — 姉妹 repo。ごみ収集日のオープンデータ。本 index のコア 5 軸はここで確立した指標を継承している
 - [tecolicom/city-tecoli-data](https://github.com/tecolicom/city-tecoli-data) — 自治体レジストリ (handle の正典)
+- [code4fukui/localgovjp](https://github.com/code4fukui/localgovjp) — 全自治体の一覧と公式サイト URL。**本 index の `website` の出典** (CC0)
+- [code4fukui/opendatacity](https://github.com/code4fukui/opendatacity) — 全自治体サイトの SSL・ドメインの実測と可視化。本 index と対象が重ならない先行事例
 
 ---
 
