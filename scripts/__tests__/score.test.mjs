@@ -432,7 +432,7 @@ test('--apply-profile は冪等で、コメントを保ち、既存の notes を
   const once = readFileSync(f, 'utf8');
   assert.match(once, /^# 先頭コメント/);
   assert.match(once, /derived_at: 2026-10-25/);
-  assert.match(once, /推定の根拠/);
+  assert.match(once, /段階表の注記/);
   assert.deepEqual(applyProfileToFile(f, tmp, { derivedAt: '2026-11-01' }), [], '同じ版・同じ結果なら何も変えない');
   assert.equal(readFileSync(f, 'utf8'), once);
   const clobber = rootWith({ 'municipalities/saitama/hanno/assessments/schedule-events.yaml': `${src}    notes: 手書きのメモ\n` });
@@ -444,4 +444,15 @@ test('--apply-profile は冪等で、コメントを保ち、既存の notes を
 test('caps の when は facts だけを見る: 軸点や由来は条件にならない (今は不要と判断)', () => {
   const row = { ...meas({ ...FULL, F: 10 }), facts: { partial: true } };
   assert.equal(score(row, { caps: [{ when: { F: 10 }, max: 10 }] }).core.total, 100, '軸 F は when の語彙ではない');
+});
+
+test('G=0 の行の notes に根拠の範囲 (フィードのエンドポイントのみ。HTML ページは取得できている) が入る', () => {
+  const r = applyProfile({ feed_http_status: 502, feed_url_basis: 'page-link', feed_url: 'https://example.jp/feed' }, REAL);
+  assert.equal(r.axes.G, 0);
+  assert.ok(r.notes.some((n) => /https:\/\/example\.jp\/feed/.test(n) && /HTML ページは同時点で取得できている/.test(n) && /継続性を観測したものではない/.test(n)));
+  assert.throws(() => applyProfile({ feed_http_status: 502, feed_url_basis: 'page-link' }, REAL), /feed_url/, 'URL が無ければ範囲を書けない');
+  for (const h of ['hanno', 'iruma']) {
+    const row = collectRows(root).find((x) => x.id === `${h}/city-site`).row;
+    assert.match(row.notes, /フィードのエンドポイント/, h);
+  }
 });

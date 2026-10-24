@@ -30,6 +30,6 @@ publishers:
       G: unknown
     derived_at: 2026-10-24
     profile: dynamic
-    profile_revision: 2026-10-24.1
-    notes: "推定の根拠 — F: Last-Modified のみをトップページで観測 (配信元 URL
+    profile_revision: 2026-10-24.2
+    notes: "段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL
       そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。"

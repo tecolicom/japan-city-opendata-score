@@ -92,6 +92,12 @@ export function applyProfile(facts, profile) {
       if (hit.points === null) { axes[k] = null; provenance[k] = 'unknown'; continue; }
       axes[k] = hit.points; provenance[k] = hit.provenance ?? 'measured';
       if (hit.provenance === 'estimated') notes.push(`${k}: ${hit.note}`);
+      if (hit.row_note) {
+        notes.push(`${k}: ${hit.row_note.replace(/\{(\w+)\}/g, (_, key) => {
+          if (!(key in facts)) throw new Error(`applyProfile: 軸 ${k} の row_note が facts.${key} を要る`);
+          return facts[key];
+        })}`);
+      }
       continue;
     }
     const keys = new Set(steps.flatMap((s) => Object.keys(s.when)));
@@ -319,7 +325,8 @@ function prefOf() {
 
 // ---- --apply-profile: facts → axes を assessment ファイルに書き戻す ----
 
-const NOTE_PREFIX = '推定の根拠 — ';
+const NOTE_PREFIX = '段階表の注記 — ';
+const isGenerated = (n) => typeof n === 'string' && (n.startsWith(NOTE_PREFIX) || n.startsWith('推定の根拠 — ')); // 後者は旧接頭辞
 const today = () => new Date().toISOString().slice(0, 10);
 
 // 1 ファイルに段階表を当てて書き戻す。コメントと整形は保つ (yaml の Document API)。
@@ -338,7 +345,8 @@ export function applyProfileToFile(path, root, { derivedAt = today() } = {}) {
     if (!profiles.has(name)) profiles.set(name, loadProfile(name, root));
     const profile = profiles.get(name);
     const r = applyProfile(p.facts, profile);
-    const same = p.profile_revision === profile.revision && JSON.stringify(p.axes) === JSON.stringify(r.axes) && JSON.stringify(p.provenance) === JSON.stringify(r.provenance);
+    const gen = r.notes ? `${NOTE_PREFIX}${r.notes.join(' / ')}` : null;
+    const same = p.profile_revision === profile.revision && JSON.stringify(p.axes) === JSON.stringify(r.axes) && JSON.stringify(p.provenance) === JSON.stringify(r.provenance) && (p.notes ?? null) === gen;
     if (same) return;
     const at = (k) => ['publishers', i, k];
     doc.setIn(at('axes'), doc.createNode(r.axes));
@@ -346,11 +354,10 @@ export function applyProfileToFile(path, root, { derivedAt = today() } = {}) {
     doc.setIn(at('derived_at'), derivedAt);
     doc.setIn(at('profile'), profile.profile);
     doc.setIn(at('profile_revision'), profile.revision);
-    const gen = r.notes ? `${NOTE_PREFIX}${r.notes.join(' / ')}` : null;
     if (gen) {
-      if (p.notes && !p.notes.startsWith(NOTE_PREFIX)) throw new Error(`${p.id}: 既存の notes を上書きしない (推定の根拠は手で足す): ${path}`);
+      if (p.notes && !isGenerated(p.notes)) throw new Error(`${p.id}: 既存の notes を上書きしない (推定の根拠は手で足す): ${path}`);
       doc.setIn(at('notes'), gen);
-    } else if (p.notes?.startsWith(NOTE_PREFIX)) doc.deleteIn(at('notes'));
+    } else if (isGenerated(p.notes)) doc.deleteIn(at('notes'));
     changed.push(p.id);
   });
   if (changed.length > 0) writeFileSync(path, String(doc));

@@ -16,6 +16,7 @@ publishers:
       conditional_get: both
       conditional_get_scope: site-top
       feed_http_status: 502
+      feed_url: https://www.city.fukaya.saitama.jp/cgi-bin/feed.php?siteNew=1&displayCount=10&displayRange=90&includeShortcut=0
       feed_url_basis: assembled
     axes:
       A: null
@@ -35,6 +36,6 @@ publishers:
       G: unknown
     derived_at: 2026-10-24
     profile: dynamic
-    profile_revision: 2026-10-24.1
-    notes: "推定の根拠 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL
+    profile_revision: 2026-10-24.2
+    notes: "段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL
       そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。"

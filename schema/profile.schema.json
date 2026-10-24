@@ -59,6 +59,7 @@
           "points": { "type": ["integer", "null"], "minimum": 0, "description": "null は『観測はあるがこの軸の根拠にならない』。軸は null + unknown になる (0 点ではない)。" },
           "basis": { "enum": ["observed", "design"], "description": "この段の裏付け。observed=実測した値がこの段に当たる (実データがある)。design=設計判断で置いた未検証の段。省略不可ではないが、F/G の段には必ず書く (validate が実データと突き合わせる)。" },
           "provenance": { "enum": ["measured", "estimated"], "description": "この段に当たった軸の由来。省略は measured。観測の地点が配信元そのものでないときは estimated (notes を要する)。" },
+          "row_note": { "type": "string", "minLength": 1, "description": "この段に当たった行の notes に写す文。{feed_url} のように facts のキーを {} で埋め込める (観測の範囲を狭く正確に書くため)。" },
           "note": { "type": "string", "minLength": 1, "description": "この段の根拠や限界。estimated の段では assessment の notes に写される。" }
         }
       }

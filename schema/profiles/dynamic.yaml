@@ -11,8 +11,13 @@
 # 点の差 (10 / 6 / 0) 自体が設計判断。実測が示したのは「両方」と「Last-Modified のみ」が
 # 現実に分かれて存在すること (19 対 11、トップページ) だけで、差の大きさは示していない。
 # 順序: 先に当たった段を採る。
+#
+# 【尺度の但し書き】F / G の点数の尺度 (0〜10) と段差は設計判断であり、実測の裏付けは無い。
+# basis: observed が示すのは「その段に実データが当たった」ことであって、「その段の点数が妥当である」
+# ことではない。段差は実データが増えたときに見直す。境界の数点は誤差域として読むこと
+# (ごみ側の正典 japan-gomi-data も同じ性質の但し書きを持つ)。
 profile: dynamic
-revision: 2026-10-24.1
+revision: 2026-10-24.2
 axis_aliases:
   G: g_proxy
 axes:
@@ -56,6 +61,7 @@ axes:
     - when: { feed_url_basis: page-link, feed_http_status: [500, 502, 503, 504] }
       points: 0
       basis: observed
+      row_note: G はフィードのエンドポイント ({feed_url}) が 5xx を返したことのみを根拠とする。この配信元の HTML ページは同時点で取得できている。配信元全体の継続性を観測したものではない。
       note: ページ上のリンクで確認したフィードが 5xx (既知の障害)。観測は 1 回で、継続の長さは別 (families の known_incidents)。
     # 組み立てた URL の失敗は、その配信元の継続性の根拠にならない。観測は残すが軸は unknown。
     - when: { feed_url_basis: assembled, feed_http_status: [500, 502, 503, 504] }

@@ -146,6 +146,12 @@
               "description": "conditional_get を観測した地点。site-top=自治体サイトのトップページ (配信元そのものではない)。source=配信元の URL そのもの。省略は未記録で、段階表は F を導出しない。",
               "enum": ["site-top", "source"]
             },
+            "feed_url": {
+              "description": "feed_http_status を取ったフィードの URL (form に書いたものと同じ)。G の notes に観測の範囲を書くのに使う。",
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            },
             "feed_url_basis": {
               "description": "feed_http_status を取ったフィード URL の出どころ。page-link=トップページ等の href で存在を確認した。assembled=family の feed_patterns から組み立てた (そのサイトがその URL で公開しているかは未確認)。",
               "enum": ["page-link", "assembled"]
