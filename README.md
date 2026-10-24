@@ -1,4 +1,4 @@
-# japan-city-data-usability
+# japan-city-opendata-score
 
 全国の自治体が web で発信する情報が「**実際に使えるか**」を、実測で評価する知識ベース。
 
@@ -84,6 +84,24 @@
 - **コア 100 点と追加軸 (F・G) を合算した総合点は作らない。** 合算するとコア部分の横断比較が壊れる
 
 正典は [`docs/index.md`](docs/index.md)。配点・ランク閾値・由来の扱いはそこが決める。
+
+## 名前について — `japan-city-opendata-<X>` の枠
+
+`score` の位置は**入れ替え可能な枠**である。設計は 3 層からなり、本 repo はそのうち L2 にあたる。
+
+| 層 | 内容 | 置き場 |
+|---|---|---|
+| **L1 レジストリ** | 自治体ごとの web 発信基盤 (CMS family・取得口・到達性) | 当面本 repo に同居 (`families/`、`web.yaml`) |
+| **L2 評価** | 情報が実際に使えるかの採点 | **本 repo (`japan-city-opendata-score`)** |
+| **L3 監視** | 時系列観測・消滅検知・横断比較 | 未実装。[`docs/monitoring.md`](docs/monitoring.md)。別 repo になりうる |
+
+語の選び方:
+
+- **`city`** — このプロジェクトの確立した語。[`city-tecoli-data/docs/city-identifier-url-scheme.md`](https://github.com/tecolicom/city-tecoli-data/blob/main/docs/city-identifier-url-scheme.md) が「自治体（city）」「city ハンドル」と定義しており、**都道府県も含む**
+- **`opendata`** — 広義。**観測可能なものは全部オープンデータ**であり、公式カタログに載っているかは問わない。見えないデータについても、その不在がこの指標の測定結果になる
+- **`score`** — 姉妹 repo の指標名「ごみの日データ 使いやすさスコア」から継いだ
+
+**「成績表」ではない。** スコアは改善の材料であって、低い自治体を非難する趣旨ではない (§中核の原則、[`docs/index.md`](docs/index.md))。
 
 ## 構成
 

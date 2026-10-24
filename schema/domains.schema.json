@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-data-usability/main/schema/domains.schema.json",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-opendata-score/main/schema/domains.schema.json",
   "title": "情報領域の語彙",
   "type": "object",
   "required": ["domains"],

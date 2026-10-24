@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-data-usability/main/schema/family.schema.json",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-opendata-score/main/schema/family.schema.json",
   "title": "自治体 web 基盤の CMS 系統 (family)",
   "description": "同じ製品なら取得口の形も罠も同じ、という前提で代表実測を群へ展開するための単位。製品名が未特定でも、指紋 (signals) だけで群として成立する。",
   "type": "object",

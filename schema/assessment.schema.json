@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-data-usability/main/schema/assessment.schema.json",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-opendata-score/main/schema/assessment.schema.json",
   "title": "配信元単位の評価 (municipalities/<pref>/<handle>/assessments/<domain>.yaml)",
   "description": "評価の単位は (自治体 × 情報領域 × 配信元)。自治体値は保存せず、配信元の行から導出する (導出規則は実データを見てから決める。ここでは固定しない)。調べていない項目は『書かない』ことで表す: facts にも axes にも既定値を置かない。",
   "type": "object",

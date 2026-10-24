@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-data-usability/main/schema/web.schema.json",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-city-opendata-score/main/schema/web.schema.json",
   "title": "自治体の web 基盤 (municipalities/<pref>/<handle>/web.yaml)",
   "description": "指紋照合の結果。family が特定できなかったときも『照合した』事実は残す (family_id: null)。",
   "type": "object",
