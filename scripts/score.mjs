@@ -31,7 +31,7 @@ export function loadProfile(name, root = join(dirname(fileURLToPath(import.meta.
   return loadYaml(path);
 }
 
-function checkProfile(profile) {
+export function checkProfile(profile) {
   if (profile == null || typeof profile !== 'object') throw new TypeError('applyProfile: profile (段階表) が必要');
   const axes = profile.axes;
   if (axes == null || typeof axes !== 'object' || Object.keys(axes).length === 0) throw new TypeError('applyProfile: profile.axes (段階表) が空か無い');
@@ -45,6 +45,19 @@ function checkProfile(profile) {
         throw new RangeError(`applyProfile: 軸 ${k} の points (${s.points}) が範囲外 (0〜${CORE_MAX[k] ?? '∞'})`);
       }
     }
+  }
+  if (profile.caps !== undefined) checkCaps(profile.caps, 'applyProfile');
+}
+
+// キャップ規則 [{when, max}]。段階表ではなく、合計後に掛ける上限。条件の語彙 (facts のキー) は領域プロファイルが決める。
+// when は段階表の when と同じ評価 (全キー一致、値が配列なら any-of)。事実が未観測なら当たらない。
+export function checkCaps(caps, who) {
+  if (!Array.isArray(caps)) throw new TypeError(`${who}: caps は配列 [{when, max}] でなければならない`);
+  for (const c of caps) {
+    if (c == null || typeof c !== 'object' || Array.isArray(c)) throw new TypeError(`${who}: caps の要素はオブジェクトでなければならない`);
+    for (const key of Object.keys(c)) if (key !== 'when' && key !== 'max') throw new TypeError(`${who}: caps に未知のキー ${key}`);
+    if (c.when == null || typeof c.when !== 'object' || Array.isArray(c.when) || Object.keys(c.when).length === 0) throw new TypeError(`${who}: caps の when が無い/空`);
+    if (!isNum(c.max) || c.max < 0 || c.max > 100) throw new RangeError(`${who}: caps の max (${c.max}) は 0〜100 の整数でなければならない`);
   }
 }
 
@@ -75,7 +88,7 @@ export function applyProfile(facts, profile) {
     axes[k] = null;
     provenance[k] = 'unknown';
   }
-  return { axes, provenance, profile_revision: profile.revision };
+  return { axes, provenance, profile_revision: profile.revision, ...(profile.caps ? { caps: profile.caps } : {}) };
 }
 
 // ---- score ----
@@ -109,15 +122,26 @@ function normalizeRow(p) {
 // 点数からコア合計とランクを出す。段階表は知らない。
 // total は 5 軸すべてが値を持つときだけ。1 軸でも unknown なら null (部分和を出さない)。
 // 追加軸 F/G は dynamic に併記するだけで、total には入れない (総合点は作らない: docs/index.md §8)。
-export function score(publisher) {
+// options.caps (任意): キャップ規則 [{when, max}]。渡されなければ上限なし。形式が不正なら例外 (黙って無視しない)。
+// 当たった上限の最小を、合計が下がるときだけ適用する。ランクは上限後の合計で決める。total が null の行には掛けない。
+export function score(publisher, options = {}) {
+  if (options == null || typeof options !== 'object' || Array.isArray(options)) throw new TypeError('score: options はオブジェクトでなければならない');
+  for (const key of Object.keys(options)) if (key !== 'caps') throw new TypeError(`score: options に未知のキー ${key}`);
+  const caps = options.caps ?? [];
+  checkCaps(caps, 'score');
   const { axes, prov } = normalizeRow(publisher);
   const core = Object.fromEntries(CORE_AXES.map((k) => [k, axes[k]]));
   const complete = CORE_AXES.every((k) => core[k] !== null);
-  const total = complete ? CORE_AXES.reduce((s, k) => s + core[k], 0) : null;
+  const raw = complete ? CORE_AXES.reduce((s, k) => s + core[k], 0) : null;
+  const facts = publisher.facts ?? {};
+  const limits = caps.filter((c) => matches(c.when, facts)).map((c) => c.max);
+  const limit = limits.length > 0 ? Math.min(...limits) : null;
+  const capped = raw !== null && limit !== null && limit < raw;
+  const total = capped ? limit : raw;
   const dynamic = Object.fromEntries(DYNAMIC_AXES.filter((k) => k in axes).map((k) => [k, axes[k]]));
   // 実測でない軸 (推定・未調査) の一覧。measured / inherited は含めない。
   const estimated = [...CORE_AXES, ...DYNAMIC_AXES].filter((k) => k in prov && (prov[k] === 'estimated' || prov[k] === 'unknown')).join(',');
-  return { core: { ...core, total, rank: total === null ? null : rankOf(total) }, dynamic, estimated };
+  return { core: { ...core, total, rank: total === null ? null : rankOf(total), capped_at: capped ? limit : null }, dynamic, estimated };
 }
 
 // ---- aggregate ----
@@ -128,9 +152,9 @@ const mean = (xs) => (xs.length === 0 ? null : Math.round((xs.reduce((a, b) => a
 //   axes[k]  … 軸単位で measured のみ。n=分子, n_total=母数 (その軸を持つ行)
 //   n, total … 5 軸すべて measured の行のみ。n_total=全行
 // コアと追加軸を合算した値は作らない。
-export function aggregate(publishers) {
+export function aggregate(publishers, options = {}) {
   if (!Array.isArray(publishers)) throw new TypeError('aggregate: publishers (配列) が必要');
-  const rows = publishers.map((p) => ({ ...normalizeRow(p), s: score(p) }));
+  const rows = publishers.map((p) => ({ ...normalizeRow(p), s: score(p, options) }));
   const axesOut = {};
   for (const k of [...CORE_AXES, ...DYNAMIC_AXES]) {
     const applicable = rows.filter((r) => k in r.prov);
@@ -169,7 +193,13 @@ export function collectRows(root) {
           const r = applyProfile(p.facts, profiles.get(p.profile));
           row = { ...p, axes: r.axes, provenance: r.provenance };
         }
-        rows.push({ id: p.id, domain: a.domain, row });
+        // axes が既にある行でも、キャップのために profile が分かるなら段階表を読む (無ければ失敗)。
+        let caps;
+        if (p.profile) {
+          if (!profiles.has(p.profile)) profiles.set(p.profile, loadProfile(p.profile, root));
+          caps = profiles.get(p.profile).caps;
+        }
+        rows.push({ id: p.id, domain: a.domain, row, caps });
       }
     }
   }
@@ -179,8 +209,8 @@ export function collectRows(root) {
 export function toCsv(rows) {
   const head = ['publisher_id', 'domain', ...CORE_AXES, 'total', 'rank', ...DYNAMIC_AXES, 'provenance', 'estimated'];
   const lines = [head.join(',')];
-  for (const { id, domain, row } of rows) {
-    const s = score(row);
+  for (const { id, domain, row, caps } of rows) {
+    const s = score(row, { caps });
     const { prov } = normalizeRow(row);
     const provStr = Object.entries(prov).map(([k, v]) => `${k}:${v}`).join(';');
     lines.push([id, domain, ...CORE_AXES.map((k) => s.core[k]), s.core.total, s.core.rank, ...DYNAMIC_AXES.map((k) => s.dynamic[k] ?? null), provStr, s.estimated].map(csvCell).join(','));
@@ -192,10 +222,14 @@ function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   const rows = collectRows(root);
   writeFileSync(join(root, 'docs', 'scores.csv'), toCsv(rows));
-  const agg = aggregate(rows.map((r) => r.row));
   console.log(`score: ${rows.length} 行 → docs/scores.csv`);
-  console.log(`  コア合計: ${agg.n}/${agg.n_total} 行が 5 軸すべて measured (平均 ${agg.total.mean ?? '—'})`);
-  for (const [k, v] of Object.entries(agg.axes)) if (v.n_total > 0) console.log(`  ${k}: measured ${v.n}/${v.n_total} (平均 ${v.mean ?? '—'})`);
+  // キャップは profile ごとに違うので、集計も profile ごとに行う (profile 不明の行は上限なし)。
+  const groups = Map.groupBy(rows, (r) => r.row.profile ?? '(profile なし)');
+  for (const [name, rs] of groups) {
+    const agg = aggregate(rs.map((r) => r.row), { caps: rs[0].caps });
+    console.log(`[${name}] コア合計: ${agg.n}/${agg.n_total} 行が 5 軸すべて measured (平均 ${agg.total.mean ?? '—'})`);
+    for (const [k, v] of Object.entries(agg.axes)) if (v.n_total > 0) console.log(`  ${k}: measured ${v.n}/${v.n_total} (平均 ${v.mean ?? '—'})`);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

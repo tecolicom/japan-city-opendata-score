@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/japan-public-data-index/profile.schema.json",
+  "title": "領域プロファイル (段階表とキャップ規則)",
+  "description": "schema/profiles/<name>.yaml。axes は観測事実 → 点数の段階表 (applyProfile が使う)。caps は合計後に掛ける上限 (score が使う)。条件の語彙は領域ごとに決める。コア配点の上限超過は scripts/score.mjs の checkProfile が検査する。",
+  "type": "object",
+  "required": ["profile", "revision", "axes"],
+  "additionalProperties": false,
+  "properties": {
+    "profile": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "ファイル名と一致させる。" },
+    "revision": { "type": "string", "minLength": 1, "description": "段階表の版。assessment の profile_revision がこれを指す。" },
+    "axes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "A": { "$ref": "#/$defs/steps" }, "B": { "$ref": "#/$defs/steps" }, "C": { "$ref": "#/$defs/steps" },
+        "D": { "$ref": "#/$defs/steps" }, "E": { "$ref": "#/$defs/steps" }, "F": { "$ref": "#/$defs/steps" }, "G": { "$ref": "#/$defs/steps" }
+      }
+    },
+    "caps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["when", "max"],
+        "additionalProperties": false,
+        "properties": {
+          "when": { "$ref": "#/$defs/when" },
+          "max": { "type": "integer", "minimum": 0, "maximum": 100 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "when": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "string" }, { "type": "number" }, { "type": "boolean" },
+          { "type": "array", "minItems": 1, "items": { "anyOf": [{ "type": "string" }, { "type": "number" }, { "type": "boolean" }] } }
+        ]
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["when", "points"],
+        "additionalProperties": false,
+        "properties": {
+          "when": { "$ref": "#/$defs/when" },
+          "points": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

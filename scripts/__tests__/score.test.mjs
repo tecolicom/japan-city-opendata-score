@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, cpSync, symlinkSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyProfile, score, aggregate, loadProfile } from '../score.mjs';
@@ -182,4 +185,121 @@ test('loadProfile は schema/profiles/<name>.yaml を読み、無ければ失敗
   assert.equal(applyProfile({ conditional_get: 'both' }, p).axes.F, 3);
   assert.throws(() => loadProfile('dynamic', root), /見つからない/);
   assert.throws(() => loadProfile('../x', root), /profile 名/);
+});
+
+// ---- 修正ラウンド 1: キャップ (合計後に掛ける上限。段階表ではなく score の引数) ----
+const capRow = (facts) => ({ ...meas({ ...FULL }), facts });
+const CAP = [{ when: { partial: true }, max: 59 }];
+
+test('caps を渡さなければ上限なしで動く', () => {
+  const s = score(capRow({ partial: true }));
+  assert.equal(s.core.total, 100);
+  assert.equal(s.core.capped_at, null);
+  assert.equal(score(capRow({ partial: true }), {}).core.total, 100);
+  assert.equal(score(capRow({ partial: true }), { caps: undefined }).core.total, 100);
+  assert.equal(score(capRow({ partial: true }), { caps: [] }).core.total, 100);
+});
+
+test('caps は合計後に掛かり、ランクは上限後の合計で決まる', () => {
+  const s = score(capRow({ partial: true }), { caps: CAP });
+  assert.equal(s.core.total, 59);
+  assert.equal(s.core.rank, 'C');
+  assert.equal(s.core.capped_at, 59);
+  assert.equal(s.core.A, 20, '軸の点は変えない');
+});
+
+test('caps の条件に当たらなければ掛からない (事実が未観測でも掛からない)', () => {
+  assert.equal(score(capRow({ partial: false }), { caps: CAP }).core.total, 100);
+  assert.equal(score(capRow({}), { caps: CAP }).core.total, 100);
+  assert.equal(score(meas({ ...FULL }), { caps: CAP }).core.total, 100, 'facts が無い行');
+});
+
+test('caps が複数当たれば最小の上限を採り、合計を下回らない上限は掛からない', () => {
+  const caps = [{ when: { partial: true }, max: 59 }, { when: { core_missing: ['x', 'y'] }, max: 19 }, { when: { partial: true }, max: 90 }];
+  const s = score(capRow({ partial: true, core_missing: 'y' }), { caps });
+  assert.equal(s.core.total, 19);
+  assert.equal(s.core.rank, 'E');
+  assert.equal(s.core.capped_at, 19);
+  const low = score(meas({ A: 5, B: 5, C: 5, D: 5, E: 5, }), { caps: [{ when: { partial: true }, max: 59 }] });
+  assert.equal(low.core.capped_at, null);
+  const s2 = score({ ...capRow({ partial: true }) }, { caps: [{ when: { partial: true }, max: 100 }] });
+  assert.equal(s2.core.capped_at, null, '合計が下がらなければ capped ではない');
+});
+
+test('total が null (unknown 軸あり) の行には caps を掛けない (null のまま)', () => {
+  const s = score({ ...meas({ A: null, B: 25, C: 20, D: 20, E: 15 }), facts: { partial: true } }, { caps: CAP });
+  assert.equal(s.core.total, null);
+  assert.equal(s.core.rank, null);
+  assert.equal(s.core.capped_at, null);
+});
+
+test('不正な caps / options は黙って無視せず例外にする', () => {
+  const row = capRow({ partial: true });
+  const bad = (caps, re) => assert.throws(() => score(row, { caps }), re, JSON.stringify(caps));
+  bad('x', /caps/);
+  bad({ when: { partial: true }, max: 59 }, /caps/);
+  bad([null], /caps/);
+  bad([{ max: 59 }], /when/);
+  bad([{ when: {}, max: 59 }], /when/);
+  bad([{ when: { partial: true } }], /max/);
+  bad([{ when: { partial: true }, max: '59' }], /max/);
+  bad([{ when: { partial: true }, max: 59.5 }], /max/);
+  bad([{ when: { partial: true }, max: -1 }], /max/);
+  bad([{ when: { partial: true }, max: 101 }], /max/);
+  bad([{ when: { partial: true }, max: 59, note: 'x' }], /未知/);
+  assert.throws(() => score(row, { cap: CAP }), /未知/, 'caps の綴り違いを無視しない');
+  assert.throws(() => score(row, 'caps'), /options/);
+  assert.throws(() => score(row, null), /options/);
+});
+
+test('aggregate も caps を受け取り、上限後の合計で集計する (不正なら例外)', () => {
+  const agg = aggregate([capRow({ partial: true })], { caps: CAP });
+  assert.equal(agg.total.mean, 59);
+  assert.equal(agg.total.ranks.C, 1);
+  assert.throws(() => aggregate([capRow({})], { caps: 'x' }), /caps/);
+});
+
+test('段階表の caps も同じ形式で検査される', () => {
+  const withCaps = (caps) => ({ ...FIXTURE_PROFILE, caps });
+  assert.deepEqual(applyProfile({ reach: 'ok' }, withCaps(CAP)).caps, CAP);
+  assert.throws(() => applyProfile({ reach: 'ok' }, withCaps([{ when: { a: 1 } }])), /max/);
+  assert.equal(applyProfile({ reach: 'ok' }, FIXTURE_PROFILE).caps, undefined);
+});
+
+// ---- 修正ラウンド 1: schema/profiles/ の検証 (validate.mjs) ----
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const runValidate = (profiles) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'jpdi-prof-'));
+  cpSync(join(root, 'schema'), join(tmp, 'schema'), { recursive: true });
+  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  for (const [rel, body] of Object.entries(profiles)) {
+    mkdirSync(dirname(join(tmp, 'schema', 'profiles', rel)), { recursive: true });
+    writeFileSync(join(tmp, 'schema', 'profiles', rel), body);
+  }
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  return { code: r.status, out: r.stderr + r.stdout, tmp };
+};
+const GOOD = 'profile: dynamic\nrevision: r1\naxes:\n  F:\n    - when: {conditional_get: both}\n      points: 20\ncaps:\n  - when: {partial: true}\n    max: 59\n';
+
+test('validate: schema/profiles/ が無くても空でも通る', () => {
+  assert.equal(runValidate({}).code, 0);
+  const r = runValidate({ '.gitkeep': '' });
+  assert.equal(r.code, 0, r.out);
+});
+
+test('validate: schema/profiles/*.yaml は検証され、壊れていれば落ちる', () => {
+  const ok = runValidate({ 'dynamic.yaml': GOOD });
+  assert.equal(ok.code, 0, ok.out);
+  assert.match(ok.out, /profiles/, '検証一覧に出る');
+  const broken = (body) => runValidate({ 'dynamic.yaml': body });
+  assert.notEqual(broken(GOOD.replace('revision: r1\n', '')).code, 0, 'revision 無し');
+  assert.notEqual(broken(GOOD.replace('points: 20', 'points: x')).code, 0, 'points が数でない');
+  assert.notEqual(broken(GOOD.replace('  F:', '  Z:')).code, 0, '未知の軸');
+  assert.notEqual(broken(GOOD.replace('max: 59', 'max: 101')).code, 0, 'caps の範囲外');
+  assert.notEqual(broken(GOOD.replace('profile: dynamic', 'profile: other')).code, 0, 'ファイル名と profile が違う');
+  assert.notEqual(broken(GOOD.replace('F:\n    - when', 'A:\n    - when').replace('points: 20', 'points: 21')).code, 0, 'コア配点超過');
+  assert.notEqual(runValidate({ 'notes.md': 'x' }).code, 0, 'yaml でないファイルは未実装として落ちる');
+  assert.notEqual(runValidate({ 'sub/x.yaml': GOOD }).code, 0, '下位ディレクトリは検証されないので落ちる');
+  const extra = runValidate({ 'dynamic.yaml': GOOD + 'foo: 1\n' });
+  assert.notEqual(extra.code, 0, '知らないキー');
 });

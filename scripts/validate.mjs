@@ -2,7 +2,7 @@
 // 検証対象 (schema/domains.yaml, families/*.yaml) は必須成果物。無ければ失敗する。
 // schema/ に何かがあるのに対応する検証が無ければ失敗する (偽の緑を出さない)。
 // ドットファイル (macOS の .DS_Store 等) は readdirSync が返すので除外する (偽の赤を出さない)。
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
@@ -10,6 +10,7 @@ import addFormats from 'ajv-formats';
 import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
 import { familySemanticErrors, webSemanticErrors } from './_lib/family-check.mjs';
 import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
+import { checkProfile } from './score.mjs';
 
 // --root <dir>: 検証対象のリポジトリルート (既定はこのスクリプトの親)。テストが壊したデータで落ちることを確かめるのに使う。
 // --registry <municipalities.yaml>: 指定されたら handle の実在も検査する (自前で採番しない)。
@@ -126,11 +127,32 @@ function checkMunicipalities() {
   return errors;
 }
 
+// schema/profiles/<name>.yaml (段階表とキャップ規則)。実物は Task 10 が置く。無い/空は正常。
+// 中にある物は全部検査し、yaml でないファイルと下位ディレクトリは「未実装」で落とす。
+function checkProfiles() {
+  const dir = join(schemaDir, 'profiles');
+  if (!existsSync(dir)) return [];
+  const errors = [];
+  const validate = ajv.compile(loadYaml(join(schemaDir, 'profile.schema.json')));
+  for (const n of listFiles(dir)) {
+    const label = `schema/profiles/${n}`;
+    if (!/\.ya?ml$/i.test(n) || statSync(join(dir, n)).isDirectory()) { errors.push(`${label}: yaml ではないファイル/ディレクトリ (対応する検証が未実装)`); continue; }
+    const prof = loadYaml(join(dir, n));
+    const errs = schemaErrors(validate, prof, label);
+    errors.push(...errs);
+    if (errs.length > 0) continue;
+    if (prof.profile !== n.replace(/\.ya?ml$/i, '')) errors.push(`${label}: profile (${prof.profile}) がファイル名と一致しない`);
+    try { checkProfile(prof); } catch (e) { errors.push(`${label}: ${e.message}`); }
+  }
+  return errors;
+}
+
 // 検証の一覧。files は schema/ 直下で、この検証が面倒を見るファイル。
 // schema/ にこれ以外のファイルがあれば「未実装」で落とす (known は files から導出する)。
 const validators = {
   'domains.yaml': { files: ['domains.yaml', 'domains.schema.json'], check: checkDomains },
   'families/*.yaml': { files: ['family.schema.json'], check: checkFamilies },
+  'schema/profiles/*.yaml': { files: ['profile.schema.json'], dirs: ['profiles'], check: checkProfiles },
   'municipalities/**': { files: ['assessment.schema.json', 'web.schema.json'], check: checkMunicipalities },
 };
 
@@ -138,7 +160,7 @@ const errors = [];
 if (!existsSync(schemaDir)) {
   errors.push('schema/: 見つからない');
 } else {
-  const known = new Set(Object.values(validators).flatMap((v) => v.files));
+  const known = new Set(Object.values(validators).flatMap((v) => [...v.files, ...(v.dirs ?? [])]));
   for (const f of listFiles(schemaDir)) {
     if (!known.has(f)) errors.push(`${f}: 対応する検証が未実装`);
   }
