@@ -7,6 +7,14 @@ url_note:
     HTTP 404) だったため、ルート https://www.town.moroyama.saitama.jp/ を取得したところ HTTP 200
     だった。観測に基づく代替
 family_id: null
-family_confidence: none
+family_confidence: below
 fingerprinted_at: 2026-10-24
-signals_seen: []
+signals_seen:
+  - signal: /theme/base/js/mutual_switching/
+    method: html
+family_divergence:
+  observed_at: 2026-10-24
+  reason: "自動指紋はトップページ HTML だけを読み、fam-feedphp-sitenew の signal は 1 本だった (閾値
+    2)。family の代表実測 (2026-10-23) の根拠: トップページ HTML の実地取得。加えて
+    /cgi-bin/feed.php?siteNew=... が 502 を返す (= エンドポイントが存在する。非該当の tokorozawa /
+    sayama / chichibu は 404)。測っているものが違い、どちらも観測として正しい"

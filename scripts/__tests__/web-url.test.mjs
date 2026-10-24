@@ -22,14 +22,14 @@ const run = (web, registry) => {
   const tmp = mkdtempSync(join(tmpdir(), 'webu-'));
   symlinkSync(join(root, 'schema'), join(tmp, 'schema'));
   symlinkSync(join(root, 'families'), join(tmp, 'families'));
-  mkdirSync(join(tmp, 'municipalities/saitama/hanno'), { recursive: true });
-  writeFileSync(join(tmp, 'municipalities/saitama/hanno/web.yaml'), web);
+  mkdirSync(join(tmp, 'municipalities/saitama/kawagoe'), { recursive: true });
+  writeFileSync(join(tmp, 'municipalities/saitama/kawagoe/web.yaml'), web);
   writeFileSync(join(tmp, 'reg.yaml'), registry);
   const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--registry', join(tmp, 'reg.yaml')], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout };
 };
-const base = 'handle: hanno\nurl: https://www.city.hanno.lg.jp/\nfamily_id: null\nfamily_confidence: none\nfingerprinted_at: 2026-10-24\nsignals_seen: []\n';
-const reg = (w) => `- {code: "11209", handle: hanno, name_ja: 飯能市, type: city, website: ${w}}\n`;
+const base = 'handle: kawagoe\nurl: https://www.city.hanno.lg.jp/\nfamily_id: null\nfamily_confidence: none\nfingerprinted_at: 2026-10-24\nsignals_seen: []\n';
+const reg = (w) => `- {code: "11209", handle: kawagoe, name_ja: 飯能市, type: city, website: ${w}}\n`;
 
 test('validate: レジストリと違う URL には根拠 (url_note) を強制する', () => {
   assert.equal(run(base, reg('https://www.city.hanno.lg.jp')).code, 0);
@@ -38,4 +38,34 @@ test('validate: レジストリと違う URL には根拠 (url_note) を強制�
   const ok = `${base}registry_website: ${REG}\nurl_note:\n  observed_at: 2026-10-24\n  reason: レジストリの URL は 404、ルートは 200\n`;
   assert.equal(run(ok, reg(REG)).code, 0, run(ok, reg(REG)).out);
   assert.notEqual(run(`${base}url_note:\n  observed_at: 2026-10-24\n  reason: x\n`, reg(REG)).code, 0, 'registry_website 無しの url_note');
+});
+
+// Ruling AC / AD
+const web = (extra, h = 'kawagoe') => `handle: ${h}\nurl: https://www.city.example.jp/\nfingerprinted_at: 2026-10-24\n${extra}`;
+const runAt = (h, body) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'webd-'));
+  symlinkSync(join(root, 'schema'), join(tmp, 'schema'));
+  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  mkdirSync(join(tmp, `municipalities/saitama/${h}`), { recursive: true });
+  writeFileSync(join(tmp, `municipalities/saitama/${h}/web.yaml`), body);
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  return { code: r.status, out: r.stderr + r.stdout };
+};
+const S = '/theme/base/js/mutual_switching/';
+
+test('AC: family_id が null でも当たった signal を残せる (below / none で区別)', () => {
+  const some = `family_id: null\nfamily_confidence: below\nsignals_seen:\n  - {signal: ${S}, method: html}\n`;
+  assert.equal(runAt('kawagoe', web(some)).code, 0, runAt('kawagoe', web(some)).out);
+  assert.equal(runAt('kawagoe', web('family_id: null\nfamily_confidence: none\nsignals_seen: []\n')).code, 0);
+  assert.notEqual(runAt('kawagoe', web(some.replace('below', 'none'))).code, 0, '痕跡があるのに none');
+  assert.notEqual(runAt('kawagoe', web('family_id: null\nfamily_confidence: below\nsignals_seen: []\n')).code, 0, '痕跡が無いのに below');
+  assert.notEqual(runAt('kawagoe', web(some.replace(S, '/no/such/'))).code, 0, '既知 family に無い signal');
+});
+
+test('AD: 代表実測に載っている handle が family と食い違うなら説明が要る', () => {
+  const miss = 'family_id: null\nfamily_confidence: none\nsignals_seen: []\n';
+  assert.notEqual(runAt('hanno', web(miss, 'hanno')).code, 0, '説明なしの食い違い');
+  const ok = `${miss}family_divergence:\n  observed_at: 2026-10-24\n  reason: 自動指紋はトップ HTML のみ\n`;
+  assert.equal(runAt('hanno', web(ok, 'hanno')).code, 0, runAt('hanno', web(ok, 'hanno')).out);
+  assert.notEqual(runAt('kawagoe', web(ok)).code, 0, '代表実測でないのに family_divergence');
 });

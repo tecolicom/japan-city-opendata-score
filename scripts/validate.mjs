@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
-import { familySemanticErrors, webSemanticErrors, webUrlErrors } from './_lib/family-check.mjs';
+import { familySemanticErrors, webSemanticErrors, webUrlErrors, representativeDivergenceErrors } from './_lib/family-check.mjs';
 import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
 import { checkProfile } from './score.mjs';
 
@@ -100,6 +100,7 @@ function checkMunicipalities() {
         web = w;
         if (w.handle !== handle) errors.push(`${at}/web.yaml: handle (${w.handle}) がディレクトリ名と一致しない`);
         errors.push(...webSemanticErrors(w, families).map((e) => `${at}/web.yaml: ${e}`));
+        errors.push(...representativeDivergenceErrors(w, families).map((e) => `${at}/web.yaml: ${e}`));
         if (registry?.get(handle)?.website) errors.push(...webUrlErrors(w, registry.get(handle).website).map((e) => `${at}/web.yaml: ${e}`));
       }
     }

@@ -1,6 +1,8 @@
 handle: kitamoto
 url: https://www.city.kitamoto.lg.jp/index.html
 family_id: null
-family_confidence: none
+family_confidence: below
 fingerprinted_at: 2026-10-24
-signals_seen: []
+signals_seen:
+  - signal: /index.update.json
+    method: html

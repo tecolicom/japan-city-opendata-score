@@ -1,6 +1,8 @@
 handle: kasukabe
 url: https://www.city.kasukabe.lg.jp/
 family_id: null
-family_confidence: none
+family_confidence: below
 fingerprinted_at: 2026-10-24
-signals_seen: []
+signals_seen:
+  - signal: /theme/base/js/mutual_switching/
+    method: html

@@ -57,7 +57,7 @@
       "pattern": "^fam-[a-z0-9]+(-[a-z0-9]+)*$"
     },
     "family_confidence": {
-      "description": "導出値。signals_seen と family の min_signals から thresholdBasis (scripts/_lib/family-check.mjs) と同じ規則で決まる。observed=観測だけで閾値を満たす / inferred=推定を足して初めて満たす / below=推定を足しても満たさない / none=どの family にも当たらない (family_id: null)。手で判断して書く値ではない。",
+      "description": "導出値。signals_seen と family の min_signals から thresholdBasis (scripts/_lib/family-check.mjs) と同じ規則で決まる。observed=観測だけで閾値を満たす / inferred=推定を足して初めて満たす / below=どの family の閾値にも届かないが痕跡は 1 本以上ある (family_id が null でも、family_id があって届かない場合も) / none=痕跡がゼロ (family_id: null)。手で判断して書く値ではない。",
       "enum": [
         "observed",
         "inferred",
@@ -70,7 +70,7 @@
       "format": "date"
     },
     "signals_seen": {
-      "description": "その自治体で実際に確認した signal (family の measured_representatives.signals_seen と同形)。family_confidence の根拠。family_id が null なら空でよい。",
+      "description": "その自治体で実際に確認した signal (family の measured_representatives.signals_seen と同形)。family_id が null でも、既知 family の signal に 1 本でも当たったなら記録する (まだ同定できていない family の候補群という情報を捨てない)。何も当たらなければ空。",
       "type": "array",
       "uniqueItems": true,
       "items": {
@@ -95,6 +95,25 @@
           }
         }
       }
+    },
+    "family_divergence": {
+      "description": "この handle が family の measured_representatives に載っているのに、自動指紋が family_id を特定できなかった/別の family だったときの説明。測っているものの違い (自動指紋はトップ HTML のみ、等) を書く。食い違いを黙って並べないための必須項目。",
+      "type": "object",
+      "required": [
+        "observed_at",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "observed_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   },
   "allOf": [
@@ -113,7 +132,10 @@
       "then": {
         "properties": {
           "family_confidence": {
-            "const": "none"
+            "enum": [
+              "none",
+              "below"
+            ]
           }
         }
       },

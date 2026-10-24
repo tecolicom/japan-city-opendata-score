@@ -41,8 +41,17 @@ export function thresholdBasis(family, rep) {
 export function webSemanticErrors(web, families) {
   const errors = [];
   if (web.family_id == null) {
-    if (web.family_confidence !== 'none') errors.push('family_id が null なのに family_confidence が none ではない');
-    if (web.signals_seen.length > 0) errors.push('family_id が null なのに signals_seen がある');
+    // 特定できなくても、既知 family の signal に当たったものは残す (候補群の情報)。
+    // 当たりがゼロなら none、1 本でもあれば below。
+    const known = new Set([...families.values()].flatMap((f) => f.signals ?? []));
+    const seen = new Set();
+    for (const { signal } of web.signals_seen) {
+      if (seen.has(signal)) errors.push(`signals_seen に重複した signal: ${signal}`);
+      seen.add(signal);
+      if (!known.has(signal)) errors.push(`signals_seen に既知 family の signals に無い値: ${signal}`);
+    }
+    const want = web.signals_seen.length === 0 ? 'none' : 'below';
+    if (web.family_confidence !== want) errors.push(`family_id が null で signals_seen が ${web.signals_seen.length} 本なら family_confidence は ${want} (実際: ${web.family_confidence})`);
     return errors;
   }
   const family = families.get(web.family_id);
@@ -68,4 +77,20 @@ export function webUrlErrors(web, registryWebsite) {
   if (!web.registry_website) return [`url (${web.url}) がレジストリの website (${registryWebsite}) と違うのに registry_website / url_note が無い`];
   if (norm(web.registry_website) !== norm(registryWebsite)) return [`registry_website (${web.registry_website}) がレジストリの website (${registryWebsite}) と一致しない`];
   return [];
+}
+
+// family の measured_representatives に載っている handle の web.yaml は、その family に一致するか、
+// 食い違いの説明 (family_divergence) を持たなければならない。黙って食い違ったまま並べない。
+export function representativeDivergenceErrors(web, families) {
+  const errors = [];
+  const listedIn = [...families.values()].filter((f) => (f.measured_representatives ?? []).some((m) => m.handle === web.handle));
+  for (const f of listedIn) {
+    if (web.family_id !== f.id && !web.family_divergence) {
+      errors.push(`${f.id} の代表実測に載っているのに family_id (${web.family_id}) が一致せず、family_divergence の説明も無い`);
+    }
+  }
+  if (web.family_divergence && listedIn.every((f) => f.id === web.family_id)) {
+    errors.push('family_divergence があるが食い違っていない (代表実測に載っていない、または family_id が一致)');
+  }
+  return errors;
 }

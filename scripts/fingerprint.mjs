@@ -116,8 +116,12 @@ async function main() {
     if (res.status === 'ok') {
       const { signals, familyId } = fingerprint(res.body, res.headers, { families });
       const family = families.find((f) => f.id === familyId);
-      const inFamily = family ? signals.filter((s) => family.signals.includes(s)) : [];
-      const signals_seen = inFamily.map((signal) => ({ signal, method: res.body.includes(signal) ? 'html' : 'header' }));
+      // family が特定できなくても、当たった signal は残す。
+      const pool = family ? new Set(family.signals) : null;
+      const signals_seen = signals.filter((x) => !pool || pool.has(x))
+        .map((signal) => ({ signal, method: res.body.includes(signal) ? 'html' : 'header' }));
+      const rep = families.find((f) => (f.measured_representatives ?? []).some((m) => m.handle === r.handle));
+      const repRec = rep?.measured_representatives.find((m) => m.handle === r.handle);
       const web = {
         handle: r.handle,
         url: usedUrl,
@@ -126,9 +130,15 @@ async function main() {
           url_note: { observed_at: today, reason: `レジストリの website (${fellBack}) だったため、ルート ${usedUrl} を取得したところ HTTP ${res.httpStatus} だった。観測に基づく代替` },
         }),
         family_id: familyId,
-        family_confidence: family ? thresholdBasis(family, { signals_seen }) : 'none',
+        family_confidence: family ? thresholdBasis(family, { signals_seen }) : (signals_seen.length > 0 ? 'below' : 'none'),
         fingerprinted_at: today,
-        signals_seen: family ? signals_seen : [],
+        signals_seen,
+        ...(rep && rep.id !== familyId ? {
+          family_divergence: {
+            observed_at: today,
+            reason: `自動指紋はトップページ HTML だけを読み、${rep.id} の signal は ${signals_seen.length} 本だった (閾値 ${rep.min_signals ?? 2})。family の代表実測 (${repRec.observed_at}) の根拠: ${repRec.evidence}。測っているものが違い、どちらも観測として正しい`,
+          },
+        } : {}),
       };
       const dir = join(root, 'municipalities', pref, r.handle);
       mkdirSync(dir, { recursive: true });
