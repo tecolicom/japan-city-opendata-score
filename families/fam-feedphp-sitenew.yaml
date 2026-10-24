@@ -27,61 +27,94 @@ measured_representatives:
     observed_at: "2026-10-12"
     evidence: "トップページ HTML (Internet Archive 2026-10-12 のスナップショット) と、/resource/js/foot_print.js の直接取得"
     signals_seen:
-      - /cgi-bin/feed.php?siteNew=
-      - /news_list.html
-      - /theme/base/js/mutual_switching/
-      - /index.update.json
-      - /resource/js/foot_print.js
+      - signal: /cgi-bin/feed.php?siteNew=
+        method: html
+      - signal: /news_list.html
+        method: html
+      - signal: /theme/base/js/mutual_switching/
+        method: html
+      - signal: /index.update.json
+        method: html
+      - signal: /resource/js/foot_print.js
+        method: html
   - handle: iruma
     observed_at: "2026-10-23"
     evidence: "トップページ HTML の実地取得"
     signals_seen:
-      - /cgi-bin/feed.php?siteNew=
-      - /news_list.html
-      - /theme/base/js/mutual_switching/
-      - /index.update.json
+      - signal: /cgi-bin/feed.php?siteNew=
+        method: html
+      - signal: /news_list.html
+        method: html
+      - signal: /theme/base/js/mutual_switching/
+        method: html
+      - signal: /index.update.json
+        method: html
   - handle: hidaka
     observed_at: "2026-10-23"
     evidence: "トップページ HTML の実地取得"
     signals_seen:
-      - /theme/base/js/mutual_switching/
-      - /index.update.json
-      - "<!-- CMS編集領域ここから -->"
+      - signal: /theme/base/js/mutual_switching/
+        method: html
+      - signal: /index.update.json
+        method: html
+      - signal: "<!-- CMS編集領域ここから -->"
+        method: html
   - handle: moroyama-town
     observed_at: "2026-10-23"
     # 弱い根拠: HTML から直接取れた signal は mutual_switching の 1 本だけ。
     # min_signals: 2 を満たすのは、feed.php が 502 を返す (= エンドポイントが存在する) ことを 1 本と数えた場合に限る。
     evidence: "トップページ HTML の実地取得。加えて /cgi-bin/feed.php?siteNew=... が 502 を返す (= エンドポイントが存在する。非該当の tokorozawa / sayama / chichibu は 404)"
     signals_seen:
-      - /theme/base/js/mutual_switching/
-      - /cgi-bin/feed.php?siteNew=
+      - signal: /theme/base/js/mutual_switching/
+        method: html
+      - signal: /cgi-bin/feed.php?siteNew=
+        method: inferred_from_status
 known_incidents:
-  - started_at: "2026-10-21"
-    ended_at: null
-    summary: feed.php が 502 で停止。複数自治体で同時に発生した。
+  - ended_at: null   # 2026-10-23 時点でも 502 のまま (終了は未確認)
+    summary: >-
+      feed.php が 502 で停止。2026-10-23 時点で 4 自治体とも 502 だった。
+      開始が同時だったかは未観測 (開始を絞れたのは hanno のみ)。
+    start_window:
+      handle: hanno
+      after: "2026-10-20T21:08:00Z"
+      before: "2026-10-21T21:07:00Z"
+      evidence: 飯能市の日次 CI が 2026-10-20 21:08 UTC の実行では 50 件取得に成功し、2026-10-21 21:07 UTC の実行で HTTP 502 を受けた
     affected:
       - handle: hanno
         observed_at: "2026-10-23"
         evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+        start_window:
+          after: "2026-10-20T21:08:00Z"
+          before: "2026-10-21T21:07:00Z"
+          evidence: 日次 CI の実行履歴 (上記 start_window と同じ)
       - handle: hidaka
         observed_at: "2026-10-23"
         evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+        start_window: null   # いつ始まったかは未観測
       - handle: iruma
         observed_at: "2026-10-23"
         evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+        start_window: null   # いつ始まったかは未観測
       - handle: moroyama-town
         observed_at: "2026-10-23"
         evidence: "/cgi-bin/feed.php?... が 502、トップページは 200 を返すことを確認"
+        start_window: null   # いつ始まったかは未観測
     cause_status: unconfirmed
     suspected_factors:
-      - summary: PHP CVE-2026-109618 / CVE-2026-109619 (CVSS 9.2、未認証 RCE、修正版公開 2026-10-21 14:00 UTC) と時系列が重なる。因果は未確認
+      - summary: PHP CVE-2026-109618 (CVSS 9.2、未認証 RCE) と時系列が重なる。因果は未確認
         sources:
-          - url: https://www.php.net/
+          - url: https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w
             confirmed_at: "2026-10-23"
             advisory: GHSA-w8hw-w9fx-j79w
-          - url: https://www.php.net/
+      - summary: PHP CVE-2026-109619 (CVSS 9.2、未認証 RCE) と時系列が重なる。因果は未確認
+        sources:
+          - url: https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp
             confirmed_at: "2026-10-23"
             advisory: GHSA-6wmf-4rv5-p3rp
+      - summary: 上記 2 件の修正版は 2026-10-21 14:00 UTC に公開された (リリース告知)
+        sources:
+          - url: https://www.php.net/archive/2026.php#2026-10-21-5
+            confirmed_at: "2026-10-23"
     cause_search:
       searched_at: "2026-10-23"
       scope: 飯能市公式サイトおよび当該 CMS に関する告知

@@ -177,7 +177,7 @@
       ]
     },
     "measured_representatives": {
-      "description": "この family を実測した自治体。どの signal を、いつ、何で確認したかを必ず持つ。signals_seen は signals の部分集合 (scripts/_lib/family-check.mjs で検査)。",
+      "description": "この family を実測した自治体。どの signal を、いつ、何で、どう確認したか (method) を必ず持つ。signal は signals の部分集合 (scripts/_lib/family-check.mjs で検査)。",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -203,12 +203,30 @@
             "minLength": 1
           },
           "signals_seen": {
+            "description": "その自治体で確認した signal。method で観測 (html/header) と推定 (inferred_from_status) を区別する。",
             "type": "array",
             "minItems": 1,
-            "uniqueItems": true,
             "items": {
-              "type": "string",
-              "minLength": 1
+              "type": "object",
+              "required": [
+                "signal",
+                "method"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "signal": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "method": {
+                  "enum": [
+                    "html",
+                    "header",
+                    "inferred_from_status"
+                  ],
+                  "description": "html=トップページ HTML に現れた / header=応答ヘッダに現れた / inferred_from_status=HTML には無く、応答状態 (502 等) から存在を推定"
+                }
+              }
             }
           }
         }
@@ -219,18 +237,14 @@
       "items": {
         "type": "object",
         "required": [
-          "started_at",
           "ended_at",
           "summary",
           "affected",
-          "cause_status"
+          "cause_status",
+          "start_window"
         ],
         "additionalProperties": false,
         "properties": {
-          "started_at": {
-            "type": "string",
-            "format": "date"
-          },
           "ended_at": {
             "description": "継続中・未確認は null。",
             "type": [
@@ -244,7 +258,7 @@
             "minLength": 1
           },
           "affected": {
-            "description": "影響を確認した自治体。確認日と根拠を持つ。",
+            "description": "2026-10-23 等の確認日時点で影響を受けていた自治体。確認日と根拠を持つ。開始時刻が同時だったとは限らない (start_window で区別)。",
             "type": "array",
             "minItems": 1,
             "items": {
@@ -252,7 +266,8 @@
               "required": [
                 "handle",
                 "observed_at",
-                "evidence"
+                "evidence",
+                "start_window"
               ],
               "additionalProperties": false,
               "properties": {
@@ -267,6 +282,37 @@
                 "evidence": {
                   "type": "string",
                   "minLength": 1
+                },
+                "start_window": {
+                  "description": "この自治体の開始窓。観測していなければ null。",
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "after",
+                        "before",
+                        "evidence"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "after": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "before": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "evidence": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -348,6 +394,39 @@
                 "minLength": 1
               }
             }
+          },
+          "start_window": {
+            "description": "停止が始まった窓。直前の正常確認 (after) と最初の異常確認 (before)。実際に観測した自治体 1 件についてのみ書く。",
+            "anyOf": [
+              {
+                "type": "object",
+                "required": [
+                  "handle",
+                  "after",
+                  "before",
+                  "evidence"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+                  },
+                  "after": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "before": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "evidence": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            ]
           }
         },
         "if": {
