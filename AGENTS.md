@@ -33,7 +33,7 @@
 - **継承できるのは A / F / G のみ。** 調べていない自治体の assessment を一括生成しない
 - **`unknown` は 0 点ではない (null)。** コア合計は 5 軸すべてが値を持つときだけ。コアと F/G を合算しない
 - **生成値を手で書かない:** `axes` / `provenance` / `derived_at` / `profile_revision` / `family_confidence` / 生成された `notes`
-- **レジストリ・`families/` の既存 family・`docs/index.md` を変更しない** (提案に留める)。`schema/` と `scripts/` の変更は依頼されたときだけ
+- **レジストリ・`families/` の既存 family・`docs/index.md` を変更しない** (提案に留める。例外: 裏付けの無い代表実測への `backing: external` の宣言を足すとき)。`schema/` と `scripts/` の変更は依頼されたときだけ
 - **検査を足したら、壊したデータで `npm run validate` が実際に落ちることを確認する。** テストが落ちるだけでは足りない (過去 6 回、「検査を書いた」が「検査が走っている」でなかった)
 - **緑でないコミットを残さない。** `git add -A` を使わず、ファイルを指定する
 

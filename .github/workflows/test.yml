@@ -1,4 +1,6 @@
 name: test
+# 現状この CI は赤になる: city-tecoli-data の公開レジストリに website が無く validate が落ちる。
+# 緑にするには website 入りのレジストリを city-tecoli-data に push する。緑にするために検査を緩めないこと (黙ってスキップする設計は意図的に取り除いた)。
 on: [push, pull_request]
 permissions:
   contents: read
