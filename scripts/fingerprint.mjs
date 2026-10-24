@@ -4,10 +4,13 @@
 // 判定規則はコードに持たない。`families/<id>.yaml` の `signals` (痕跡の文字列) と
 // `min_signals` (当たりとみなす本数) が正典で、ここはそれを読んで数えるだけ。
 import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadYaml } from './_lib/lib.mjs';
 
-export const DEFAULT_FAMILIES_DIR = 'families';
+// 既定は repo ルートの families/。cwd 相対にすると、repo ルート以外から呼ばれたときに
+// 黙って 0 件になり、全自治体が familyId: null になってもエラーが出ない。
+export const DEFAULT_FAMILIES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'families');
 // family が min_signals を書いていないときの閾値。
 // 1 本の偶然一致で family を名乗らせたくないので 2 本を既定とする。
 export const DEFAULT_MIN_SIGNALS = 2;

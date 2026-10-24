@@ -2,6 +2,7 @@
 // 目的は「礼儀をそう書いた」ではなく「そう動く」ことを示すこと。
 // 偽の fetch が受け取った URL・ヘッダ・呼び出し回数・同時実行数・待ち時間を記録して検証する。
 import { test } from 'node:test';
+import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -305,4 +306,33 @@ test('同じ cacheDir を相対/絶対で渡しても礼儀の状態は 1 本 (�
   ]);
   assert.equal(rec.state.maxInFlight, 1);
   assert.equal(rec.urls().filter((u) => u === ROBOTS).length, 1);
+});
+
+// ---- 本物の fetch で確かめる (ループバックのみ。外には出ない) ----
+// リダイレクト処理は「Node の fetch が redirect: 'manual' で本物の 3xx と location を返す」
+// ことに全部乗っている。偽 fetch だけで確かめると、ここが違っていたときに
+// 「HTTP 0 エラー」が永続キャッシュされ、www へ飛ぶ自治体が二度と取得されなくなる。
+test('本物の fetch でも 3xx を自分で追い、移転先の robots.txt を見る', { timeout: 10000 }, async () => {
+  const seen = [];
+  const server = createServer((req, res) => {
+    seen.push(req.url);
+    if (req.url === '/robots.txt') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end(ALLOW_ALL); return; }
+    if (req.url === '/') { res.writeHead(301, { location: '/dest' }); res.end(); return; }
+    if (req.url === '/dest') { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html>移転先</html>'); return; }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    // _fetch は注入しない (本物の fetch を使う)。待ちだけ潰してテストを速く保つ。
+    const r = await politeFetch(`${origin}/`, { cacheDir: freshCache(), _sleep: async () => {} });
+    assert.equal(r.status, 'ok');
+    assert.equal(r.httpStatus, 200);
+    assert.equal(r.body, '<html>移転先</html>');
+    assert.equal(r.url, `${origin}/dest`);
+    assert.deepEqual(r.redirects, [`${origin}/`]);
+    assert.deepEqual(seen, ['/robots.txt', '/', '/dest']);
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
 });
