@@ -62,6 +62,18 @@
 | どの family にも未同定 | 24 件 |
 | 条件付き GET (ETag / Last-Modified) | **全 30 件が対応** (非対応 0 件) |
 
+## はじめに
+
+自分の自治体を足したい人・エージェントはここから:
+
+| 読むもの | 誰向け |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 人 — 自分の町を足したい |
+| [`AGENTS.md`](AGENTS.md) | エージェント (Claude Code / Codex) |
+| [`docs/playbook.md`](docs/playbook.md) | 収録手順書 — 手順・判断基準・実際に踏んだ失敗 |
+
+時系列観測・消滅検知は未実装 ([`docs/monitoring.md`](docs/monitoring.md) に範囲だけ宣言)。
+
 ## 取得の礼儀 (貢献する人は必ず読むこと)
 
 対象は**他者の、それも公共機関のサーバ**である。以下は交渉の余地がない:
@@ -97,4 +109,10 @@ make help    # コマンド一覧
 
 ---
 
-収録手順書 (`docs/playbook.md`)、貢献の入口 (`CONTRIBUTING.md`)、エージェント向けの手引き (`AGENTS.md`) は**未整備**。
+**未着手・未確定のもの** (拾える仕事。一覧は [`docs/playbook.md`](docs/playbook.md) 末尾):
+
+- family 候補 3 系統 (代表実測が無いので `families/` に未登録。`docs/measurements/saitama-2026-10-24.md`)
+- 標準 OD の悉皆確認 (埼玉 30 件すべて「未確認」)
+- F の `measured` (配信元 URL そのものでの条件付き GET。現状 0 件)
+- 非 lg.jp の配信元 (図書館・観光協会・商工会議所)
+- 時系列観測 (監視層。[`docs/monitoring.md`](docs/monitoring.md))
