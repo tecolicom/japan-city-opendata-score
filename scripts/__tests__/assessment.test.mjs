@@ -22,7 +22,8 @@ const webValidate = ajv.compile(loadYaml(join(root, 'schema', 'web.schema.json')
 const a = loadYaml(join(root, 'scripts', '__tests__', '__fixtures__', 'assessment-hanno-schedule-events.yaml'));
 
 // schema と意味検査の両方を通って初めて妥当
-const validate = (p) => validatePublisher(p) === true && assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno' }).length === 0;
+const domains = new Map(loadYaml(join(root, 'schema', 'domains.yaml')).domains.map((d) => [d.id, d]));
+const validate = (p) => validatePublisher(p) === true && assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno', domains }).length === 0;
 const pub = { ...a.publishers[1] };
 const pubBase = { ...pub, observed_at: '2026-10-23' };
 const DER = { derived_at: '2026-10-30', profile: 'dynamic', profile_revision: 'r1' };
@@ -40,8 +41,6 @@ test('publisher id は handle で名前空間化される', () => {
   assert.equal(a.publishers[1].id, 'hanno/lib-main');
   assert.ok(!validatePublisher({ ...pub, id: 'lib-main' }), '名前空間なしは不可');
   assert.ok(!validatePublisher({ ...pub, id: 'hanno/Lib Main' }));
-  // 別の自治体の「図書館」は同じ slug でも衝突しない
-  assert.notEqual('hanno/lib-main', 'hidaka/lib-main');
   const errs = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [{ ...pub, id: 'hidaka/lib-main' }] }, { handle: 'hanno' });
   assert.ok(errs.some((e) => /handle/.test(e)), '置かれた handle と id の接頭辞が違えば不可');
   const dup = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pub, pub] }, { handle: 'hanno' });
@@ -63,13 +62,13 @@ test('status: gone は観測日と最終成功日を要求する', () => {
   assert.ok(!validatePublisher({ ...pub, status: 'gone', last_success_at: '2026-10-21' }));
   assert.ok(validate({ ...pub, status: 'gone', observed_at: '2026-10-23', last_success_at: '2026-10-21' }));
   assert.ok(!validate({ ...pub, status: 'gone', observed_at: '2026-10-01', last_success_at: '2026-10-21' }), '最終成功が観測より後は矛盾');
-  assert.ok(!validatePublisher({ ...pub, status: 'moved', observed_at: '2026-10-23' }), 'moved は移転先を要求する');
+  assert.ok(!validatePublisher({ ...pub, status: 'moved', observed_at: '2026-10-23', last_success_at: '2026-10-21' }), 'moved は移転先を要求する (他は揃っている)');
 });
 
 test('unknown な軸は 0 ではなく provenance が unknown', () => {
   assert.ok(validate({ ...pub, ...DER, axes: { A: null }, provenance: { A: 'unknown' } }));
   assert.ok(!validate({ ...pub, ...DER, axes: { A: 0 }, provenance: { A: 'unknown' } }), 'unknown に 0 点は付けられない');
-  assert.ok(!validate({ ...pubBase, ...DER, axes: { A: null }, provenance: { A: 'measured' } }), 'measured なのに値が無い');
+  assert.ok(!validate({ ...pubBase, ...DER, axes: { A: null }, provenance: { A: 'measured' }, facts: { stable_url: true } }), 'measured なのに値が無い');
   assert.ok(!validate({ ...pubBase, ...DER, axes: { A: 10 } }), '由来の無い点数は不可');
   assert.ok(!validate({ ...pubBase, ...DER, axes: { A: 10 }, provenance: { A: 'unknown' } }));
 });
@@ -121,7 +120,7 @@ test('domain_name は url のホストと一致する', () => {
 
 const fam = loadYaml(join(root, 'families', 'fam-feedphp-sitenew.yaml'));
 const families = new Map([[fam.id, fam]]);
-const [S1, S2, S3] = fam.signals;
+const [S1, S2] = fam.signals;
 const webOf = (seen, conf, id = fam.id) => ({ handle: 'hanno', family_id: id, family_confidence: conf, signals_seen: seen, fingerprinted_at: '2026-10-23' });
 const sig = (signal, method = 'html') => ({ signal, method });
 
@@ -154,17 +153,51 @@ test('family_confidence は thresholdBasis と同じ判定になる (導出値)'
   assert.ok(webSemanticErrors(webOf([sig(S1), sig(S1)], 'observed'), families).some((e) => /重複/.test(e)), '水増し');
   assert.ok(webSemanticErrors(webOf([sig('/nowhere'), sig(S1)], 'observed'), families).some((e) => /signals に無い/.test(e)));
   assert.ok(webSemanticErrors(webOf([], 'below', 'fam-nope'), families).length > 0, '未登録 family');
-  void S3;
 });
 
 test('axes は導出値: derived_at / profile / profile_revision を伴い、観測より後', () => {
-  const ax = { axes: { A: 10 }, provenance: { A: 'measured' }, observed_at: '2026-10-23' };
+  const ax = { axes: { A: 10 }, provenance: { A: 'measured' }, observed_at: '2026-10-23', facts: { stable_url: true } };
   assert.ok(!validatePublisher({ ...pub, ...ax }), '導出の由来なしは不可');
   const der = DER;
   assert.ok(validate({ ...pub, ...ax, ...der }));
   for (const k of Object.keys(der)) assert.ok(!validatePublisher({ ...pub, ...ax, ...der, [k]: undefined }), k);
   assert.ok(!validate({ ...pub, ...ax, ...der, derived_at: '2026-10-01' }), '導出が観測より前');
   assert.ok(validate({ ...pubBase, facts: { stable_url: true } }), 'facts だけなら導出の由来は不要');
+});
+
+test('measured / estimated の軸は観測の記録 (facts) を要求する。A/F は reachability も根拠になる', () => {
+  const m = (k, prov, extra = {}) => ({ ...pubBase, ...DER, notes: 'n', axes: { [k]: 5 }, provenance: { [k]: prov }, ...extra });
+  for (const prov of ['measured', 'estimated']) {
+    assert.ok(!validate(m('B', prov)), `${prov}: facts 無しは不可`);
+    assert.ok(validate(m('B', prov, { facts: { stable_url: true } })), prov);
+    assert.ok(!validate(m('B', prov, { reachability: { overseas_rest: 'blocked' } })), 'B に到達性は根拠にならない');
+    assert.ok(validate(m('A', prov, { reachability: { overseas_rest: 'blocked' } })), 'A は到達性が根拠になる');
+  }
+});
+
+test('axes の profile は領域のプロファイルと一致し、未判定の領域には axes を書けない', () => {
+  const p = { ...pubBase, ...DER, axes: { A: 5 }, provenance: { A: 'measured' }, facts: { stable_url: true } };
+  const check = (dom, pp) => assessmentSemanticErrors({ domain: dom, publishers: [pp] }, { handle: 'hanno', domains });
+  assert.deepEqual(check('schedule-events', p), []);
+  assert.ok(check('schedule-events', { ...p, profile: 'static' }).some((e) => /プロファイル/.test(e)), '領域は dynamic');
+  assert.ok(check('aed', p).some((e) => /未判定/.test(e)), 'profile が null の領域');
+  assert.deepEqual(check('aed', pubBase), [], 'axes が無ければ未判定の領域でも記録できる');
+});
+
+test('derived_at / profile / profile_revision は axes があるときだけ書ける', () => {
+  for (const k of Object.keys(DER)) assert.ok(!validatePublisher({ ...pubBase, [k]: DER[k] }), k);
+});
+
+test('inherited は web.yaml の確認が要る: 存在・family 一致・確度が observed/inferred', () => {
+  const p = { ...pubBase, ...DER, inherited_from: inh, axes: { A: 5 }, provenance: { A: 'inherited' } };
+  const web = (o = {}) => ({ handle: 'hanno', family_id: fam.id, family_confidence: 'observed', signals_seen: [], fingerprinted_at: '2026-10-23', ...o });
+  const check = (w) => assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno', domains, families, web: w });
+  assert.deepEqual(check(web()), []);
+  assert.deepEqual(check(web({ family_confidence: 'inferred' })), []);
+  assert.ok(check(undefined).some((e) => /web\.yaml が無い/.test(e)), 'web.yaml が無い');
+  assert.ok(check(web({ family_id: 'fam-other' })).some((e) => /family_id/.test(e)), 'family 不一致');
+  assert.ok(check(web({ family_confidence: 'below' })).some((e) => /family_confidence/.test(e)), 'below');
+  assert.ok(check(web({ family_id: null, family_confidence: 'none' })).some((e) => /family_id|family_confidence/.test(e)), 'none');
 });
 
 test('moved も gone と同じく観測日と最終成功日を要求する', () => {
@@ -231,5 +264,23 @@ test('validate.mjs: 正しい assessment は通り、壊したものは落ちる
     url:`);
   assert.notEqual(inheritedBad.code, 0, '代表実測でない handle からの継承');
   const web = 'municipalities/saitama/hanno/web.yaml';
+  const inh1 = broken('    url:', `    inherited_from: {family_id: fam-feedphp-sitenew, representative_handle: hanno}
+    provenance: {A: inherited}
+    axes: {A: 10}
+    derived_at: 2026-10-30
+    profile: dynamic
+    profile_revision: r1
+    url:`);
+  assert.equal(inh1.code, 0, `web.yaml が観測済みなら inherited は通る: ${inh1.out}`);
+  const inhFiles = { ...good, [A]: good[A].replace('    url:', `    inherited_from: {family_id: fam-feedphp-sitenew, representative_handle: hanno}
+    provenance: {A: inherited}
+    axes: {A: 10}
+    derived_at: 2026-10-30
+    profile: dynamic
+    profile_revision: r1
+    url:`) };
+  const { [web]: _w, ...noWeb } = inhFiles;
+  assert.notEqual(runValidate(noWeb).code, 0, 'web.yaml 無しの inherited');
+  assert.notEqual(runValidate({ ...inhFiles, [web]: inhFiles[web].replace('observed', 'below').replace(/signals_seen:[\s\S]*?fingerprinted/, 'signals_seen:\n  - {signal: /news_list.html, method: html}\nfingerprinted') }).code, 0, 'below の inherited');
   assert.notEqual(runValidate({ ...good, [web]: good[web].replace('observed', 'below') }).code, 0, '導出値と違う family_confidence');
 });

@@ -89,18 +89,21 @@ function checkMunicipalities() {
   for (const { pref, handle, dir } of listMunicipalityDirs(root)) {
     const at = `municipalities/${pref}/${handle}`;
     if (registry && !registry.has(handle)) errors.push(`${at}: handle が municipalities.yaml に無い`);
-    let webFamily;
+    // assessments/ は web.yaml を参照する (継承の確認) ので、先に web.yaml を読む。
+    let web;
+    if (existsSync(join(dir, 'web.yaml'))) {
+      const w = loadYaml(join(dir, 'web.yaml'));
+      const errs = schemaErrors(validateWeb, w, `${at}/web.yaml`);
+      errors.push(...errs);
+      if (errs.length === 0) {
+        web = w;
+        if (w.handle !== handle) errors.push(`${at}/web.yaml: handle (${w.handle}) がディレクトリ名と一致しない`);
+        errors.push(...webSemanticErrors(w, families).map((e) => `${at}/web.yaml: ${e}`));
+      }
+    }
     for (const n of listFiles(dir)) {
-      if (n === 'web.yaml') {
-        const web = loadYaml(join(dir, n));
-        const errs = schemaErrors(validateWeb, web, `${at}/web.yaml`);
-        errors.push(...errs);
-        if (errs.length === 0) {
-          webFamily = web.family_id;
-          if (web.handle !== handle) errors.push(`${at}/web.yaml: handle (${web.handle}) がディレクトリ名と一致しない`);
-          errors.push(...webSemanticErrors(web, families).map((e) => `${at}/web.yaml: ${e}`));
-        }
-      } else if (n === 'assessments') {
+      if (n === 'web.yaml') continue;
+      if (n === 'assessments') {
         for (const f of listFiles(join(dir, n))) {
           const label = `${at}/assessments/${f}`;
           if (!yamlName(f)) { errors.push(`${label}: yaml ではないファイル (対応する検証が未実装)`); continue; }
@@ -109,13 +112,10 @@ function checkMunicipalities() {
           errors.push(...errs);
           if (errs.length > 0) continue;
           if (a.domain !== f.replace(/\.ya?ml$/i, '')) errors.push(`${label}: domain (${a.domain}) がファイル名と一致しない`);
-          errors.push(...assessmentSemanticErrors(a, { handle, domains, families }).map((e) => `${label}: ${e}`));
+          errors.push(...assessmentSemanticErrors(a, { handle, domains, families, web }).map((e) => `${label}: ${e}`));
           for (const p of a.publishers) {
             if (publisherIds.has(p.id)) errors.push(`${label}: publisher id が他のファイルと重複: ${p.id}`);
             publisherIds.add(p.id);
-            if (webFamily !== undefined && p.inherited_from && p.inherited_from.family_id !== webFamily) {
-              errors.push(`${label}: ${p.id} の inherited_from.family_id が web.yaml の family_id (${webFamily}) と違う`);
-            }
           }
         }
       } else {

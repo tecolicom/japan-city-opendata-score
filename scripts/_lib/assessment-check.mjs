@@ -2,7 +2,10 @@
 // (family-check.mjs の先例に倣う)。schema を通った assessment に対して呼ぶ。
 //
 // ctx: { handle }                       … このファイルが置かれた自治体ディレクトリの handle (必須)
-//      { domains, families }            … 任意。渡されれば領域の存在・プロファイル・継承元の実在も検査する
+//      { domains }                      … 任意。領域の存在と、axes の profile が領域のプロファイルと一致するかを検査する
+//      { families, web }                … 任意 (families を渡すと継承の検査が有効になる)。
+//        web はその自治体の web.yaml (無ければ undefined)。inherited は web.yaml が存在し、
+//        family_id が一致し、family_confidence が observed/inferred のときだけ書ける。
 //        domains: Map<id, {profile}>、families: Map<id, family>
 
 const AXES = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
@@ -32,6 +35,11 @@ export function assessmentSemanticErrors(a, ctx) {
       errors.push(`${at}: derived_at が observed_at より前 (導出は観測の後)`);
     }
 
+    if (p.axes && ctx.domains?.has(a.domain)) {
+      if (profile == null) errors.push(`${at}: 領域 ${a.domain} はプロファイル未判定なので axes を書けない`);
+      else if (p.profile !== profile) errors.push(`${at}: profile (${p.profile}) が領域 ${a.domain} のプロファイル (${profile}) と違う`);
+    }
+
     const axes = p.axes ?? {};
     const prov = p.provenance ?? {};
     for (const k of AXES) {
@@ -40,6 +48,11 @@ export function assessmentSemanticErrors(a, ctx) {
       if (has && prov[k] === 'unknown') errors.push(`${at}: 軸 ${k} は unknown なのに点数がある (unknown は値を持たない)`);
       if (!has && prov[k] !== undefined && prov[k] !== 'unknown') errors.push(`${at}: 軸 ${k} の由来が ${prov[k]} なのに点数が無い`);
       if (prov[k] !== undefined && axes[k] === undefined) errors.push(`${at}: 軸 ${k} に provenance だけがあり axes に無い (null で明示する)`);
+      if (has && (prov[k] === 'measured' || prov[k] === 'estimated')) {
+        // 観測の記録が無い点数を実測・推定と書かせない。到達性は A / F の根拠として認める。
+        const grounded = p.facts || ((k === 'A' || k === 'F') && p.reachability);
+        if (!grounded) errors.push(`${at}: 軸 ${k} は ${prov[k]} だが根拠 (facts${k === 'A' || k === 'F' ? ' か reachability' : ''}) が無い`);
+      }
       if ((k === 'F' || k === 'G') && profile === 'static' && (has || prov[k] !== undefined)) {
         errors.push(`${at}: 静的領域に追加軸 ${k} は無い`);
       }
@@ -49,6 +62,11 @@ export function assessmentSemanticErrors(a, ctx) {
       if (!Object.values(prov).includes('inherited')) errors.push(`${at}: inherited_from があるのに inherited の軸が無い`);
       const fam = ctx.families?.get(p.inherited_from.family_id);
       if (ctx.families) {
+        if (!ctx.web) errors.push(`${at}: inherited だが web.yaml が無い (family 所属を確認していない)`);
+        else {
+          if (ctx.web.family_id !== p.inherited_from.family_id) errors.push(`${at}: inherited_from.family_id が web.yaml の family_id (${ctx.web.family_id}) と違う`);
+          if (!['observed', 'inferred'].includes(ctx.web.family_confidence)) errors.push(`${at}: web.yaml の family_confidence が ${ctx.web.family_confidence} なので inherited は書けない`);
+        }
         if (!fam) errors.push(`${at}: inherited_from.family_id が families/ に無い: ${p.inherited_from.family_id}`);
         else if (!fam.measured_representatives.some((m) => m.handle === p.inherited_from.representative_handle)) {
           errors.push(`${at}: ${p.inherited_from.representative_handle} は ${fam.id} の代表実測ではない`);

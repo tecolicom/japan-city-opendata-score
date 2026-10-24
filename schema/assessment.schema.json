@@ -539,6 +539,13 @@
               "profile": true,
               "profile_revision": true
             }
+          },
+          "else": {
+            "properties": {
+              "derived_at": false,
+              "profile": false,
+              "profile_revision": false
+            }
           }
         }
       ]
