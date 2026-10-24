@@ -1,4 +1,4 @@
-# japan-public-data-index
+# japan-city-data-usability
 
 全国の自治体が web で発信する情報が「**実際に使えるか**」を、実測で評価する知識ベース。
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/japan-public-data-index/profile.schema.json",
+  "$id": "https://example.invalid/japan-city-data-usability/profile.schema.json",
   "title": "領域プロファイル (段階表とキャップ規則)",
   "description": "schema/profiles/<name>.yaml。axes は観測事実 → 点数の段階表 (applyProfile が使う)。caps は合計後に掛ける上限 (score が使う)。条件の語彙は領域ごとに決める。コア配点の上限超過は scripts/score.mjs の checkProfile が検査する。",
   "type": "object",

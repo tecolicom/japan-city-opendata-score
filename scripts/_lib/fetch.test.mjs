@@ -138,7 +138,7 @@ test('robotsAllows は空の Disallow を全許可として扱う', () => {
 });
 
 test('robotsAllows は自分の product token のグループを * より優先する', () => {
-  const txt = 'User-agent: *\nDisallow:\n\nUser-agent: japan-public-data-index\nDisallow: /\n';
+  const txt = 'User-agent: *\nDisallow:\n\nUser-agent: japan-city-data-usability\nDisallow: /\n';
   assert.equal(robotsAllows(txt, '/'), false);
 });
 
