@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: iruma/city-site
+    name_ja: 入間市 公式サイト (イベント情報一覧)
+    entity_type: municipality
+    domain_name: www.city.iruma.saitama.jp
+    url: https://www.city.iruma.saitama.jp/event_list.html
+    form: イベント情報一覧 (HTML) と新着 RSS (feed.php、2026-10-24 時点で 502)
+    observed_at: 2026-10-24

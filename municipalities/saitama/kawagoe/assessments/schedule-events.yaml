@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: kawagoe/city-site
+    name_ja: 川越市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.kawagoe.saitama.jp
+    url: https://www.city.kawagoe.saitama.jp/event_calendar.html
+    form: イベントカレンダー (HTML)
+    observed_at: 2026-10-24

@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: fukaya/city-site
+    name_ja: 深谷市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.fukaya.saitama.jp
+    url: http://www.city.fukaya.saitama.jp/event/calendar.html
+    form: イベントカレンダー (HTML) と催し新着一覧
+    observed_at: 2026-10-24

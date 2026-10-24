@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: higashimatsuyama/city-site
+    name_ja: 東松山市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.higashimatsuyama.lg.jp
+    url: https://www.city.higashimatsuyama.lg.jp/calendar/
+    form: イベントカレンダー (HTML) とイベント情報 RSS
+    observed_at: 2026-10-24

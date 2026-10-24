@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: chichibu/city-site
+    name_ja: 秩父市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.chichibu.lg.jp
+    url: http://www.city.chichibu.lg.jp/1011.html
+    form: イベントカレンダー (HTML)
+    observed_at: 2026-10-24

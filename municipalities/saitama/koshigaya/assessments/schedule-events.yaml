@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: koshigaya/city-site
+    name_ja: 越谷市 公式サイト (イベント情報一覧)
+    entity_type: municipality
+    domain_name: www.city.koshigaya.saitama.jp
+    url: https://www.city.koshigaya.saitama.jp/kurashi_shisei/info/event/calendar/calendar.html
+    form: イベント情報一覧 (HTML カレンダー)
+    observed_at: 2026-10-24

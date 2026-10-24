@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: kumagaya/city-site
+    name_ja: 熊谷市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.kumagaya.lg.jp
+    url: https://www.city.kumagaya.lg.jp/kanko/event/index.html
+    form: イベントカレンダー (HTML)
+    observed_at: 2026-10-24

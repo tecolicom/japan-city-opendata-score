@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: sayama/city-site
+    name_ja: 狭山市 公式サイト (イベント・講座)
+    entity_type: municipality
+    domain_name: www.city.sayama.saitama.jp
+    url: https://www.city.sayama.saitama.jp/kankou/event/index.html
+    form: イベント・講座 (HTML)
+    observed_at: 2026-10-24

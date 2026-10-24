@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: tokorozawa/city-site
+    name_ja: 所沢市 公式サイト (イベント情報一覧)
+    entity_type: municipality
+    domain_name: www.city.tokorozawa.saitama.jp
+    url: https://www.city.tokorozawa.saitama.jp/iitokoro/event/index.html
+    form: イベント情報一覧 (HTML)
+    observed_at: 2026-10-24

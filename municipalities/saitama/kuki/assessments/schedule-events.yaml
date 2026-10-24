@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: kuki/city-site
+    name_ja: 久喜市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.kuki.lg.jp
+    url: https://www.city.kuki.lg.jp/event_calendar.html
+    form: イベントカレンダー (HTML)
+    observed_at: 2026-10-24

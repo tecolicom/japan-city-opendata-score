@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: gyoda/city-site
+    name_ja: 行田市 公式サイト (イベント一覧)
+    entity_type: municipality
+    domain_name: www.city.gyoda.lg.jp
+    url: https://www.city.gyoda.lg.jp/evnet_list.html
+    form: イベント一覧 (HTML) とイベントカレンダー
+    observed_at: 2026-10-24

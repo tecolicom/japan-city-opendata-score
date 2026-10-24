@@ -1,0 +1,10 @@
+domain: schedule-events
+surveyed_at: 2026-10-24
+publishers:
+  - id: wako/city-site
+    name_ja: 和光市 公式サイト (イベントカレンダー)
+    entity_type: municipality
+    domain_name: www.city.wako.lg.jp
+    url: https://www.city.wako.lg.jp/event_calendar.html
+    form: イベントカレンダー (HTML)
+    observed_at: 2026-10-24
