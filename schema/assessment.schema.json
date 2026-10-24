@@ -344,6 +344,20 @@
         "notes": {
           "type": "string",
           "minLength": 1
+        },
+        "derived_at": {
+          "description": "axes を facts から導出した日。観測日 (observed_at) とは別。",
+          "$ref": "#/$defs/date"
+        },
+        "profile": {
+          "description": "axes を導出するのに当てた領域プロファイルの識別子。",
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_revision": {
+          "description": "当てた段階表の版。段階表の改訂で同じ facts から別の axes が出るため、改訂を追えるようにする。",
+          "type": "string",
+          "minLength": 1
         }
       },
       "allOf": [
@@ -386,10 +400,12 @@
           "then": {
             "properties": {
               "observed_at": true,
-              "moved_to": true
+              "moved_to": true,
+              "last_success_at": true
             },
             "required": [
               "observed_at",
+              "last_success_at",
               "moved_to"
             ]
           }
@@ -499,6 +515,30 @@
             "required": [
               "notes"
             ]
+          }
+        },
+        {
+          "description": "axes は導出値。導出の日・プロファイル・版を伴う。",
+          "if": {
+            "type": "object",
+            "required": [
+              "axes"
+            ],
+            "properties": {
+              "axes": true
+            }
+          },
+          "then": {
+            "required": [
+              "derived_at",
+              "profile",
+              "profile_revision"
+            ],
+            "properties": {
+              "derived_at": true,
+              "profile": true,
+              "profile_revision": true
+            }
           }
         }
       ]

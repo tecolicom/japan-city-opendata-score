@@ -28,6 +28,10 @@ export function assessmentSemanticErrors(a, ctx) {
       errors.push(`${at}: last_success_at が observed_at より後`);
     }
 
+    if (p.derived_at && p.observed_at && DAY(p.derived_at) < DAY(p.observed_at)) {
+      errors.push(`${at}: derived_at が observed_at より前 (導出は観測の後)`);
+    }
+
     const axes = p.axes ?? {};
     const prov = p.provenance ?? {};
     for (const k of AXES) {

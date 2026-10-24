@@ -4,15 +4,97 @@
   "title": "自治体の web 基盤 (municipalities/<pref>/<handle>/web.yaml)",
   "description": "指紋照合の結果。family が特定できなかったときも『照合した』事実は残す (family_id: null)。",
   "type": "object",
-  "required": ["handle", "family_id", "family_confidence", "fingerprinted_at"],
+  "required": [
+    "handle",
+    "family_id",
+    "family_confidence",
+    "signals_seen",
+    "fingerprinted_at"
+  ],
   "additionalProperties": false,
   "properties": {
-    "handle": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "handle": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
     "family_id": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "pattern": "^fam-[a-z0-9]+(-[a-z0-9]+)*$"
     },
-    "family_confidence": { "enum": ["high", "medium", "low", "none"] },
-    "fingerprinted_at": { "type": "string", "format": "date" }
-  }
+    "family_confidence": {
+      "description": "導出値。signals_seen と family の min_signals から thresholdBasis (scripts/_lib/family-check.mjs) と同じ規則で決まる。observed=観測だけで閾値を満たす / inferred=推定を足して初めて満たす / below=推定を足しても満たさない / none=どの family にも当たらない (family_id: null)。手で判断して書く値ではない。",
+      "enum": [
+        "observed",
+        "inferred",
+        "below",
+        "none"
+      ]
+    },
+    "fingerprinted_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "signals_seen": {
+      "description": "その自治体で実際に確認した signal (family の measured_representatives.signals_seen と同形)。family_confidence の根拠。family_id が null なら空でよい。",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": [
+          "signal",
+          "method"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "signal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "method": {
+            "enum": [
+              "html",
+              "header",
+              "inferred_from_status"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "family_id": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "family_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "family_confidence": {
+            "const": "none"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "family_confidence": {
+            "enum": [
+              "observed",
+              "inferred",
+              "below"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

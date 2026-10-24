@@ -32,3 +32,29 @@ export function thresholdBasis(family, rep) {
   if (observed >= min) return 'observed';
   return all >= min ? 'inferred' : 'below';
 }
+
+/**
+ * web.yaml の意味検査。family_confidence は書き手の判断ではなく導出値で、
+ * signals_seen と family の min_signals から thresholdBasis と同じ規則で決まる。
+ * families: Map<id, family>
+ */
+export function webSemanticErrors(web, families) {
+  const errors = [];
+  if (web.family_id == null) {
+    if (web.family_confidence !== 'none') errors.push('family_id が null なのに family_confidence が none ではない');
+    if (web.signals_seen.length > 0) errors.push('family_id が null なのに signals_seen がある');
+    return errors;
+  }
+  const family = families.get(web.family_id);
+  if (!family) return [`family_id が families/ に無い: ${web.family_id}`];
+  const known = new Set(family.signals ?? []);
+  const seen = new Set();
+  for (const { signal } of web.signals_seen) {
+    if (seen.has(signal)) errors.push(`signals_seen に重複した signal: ${signal}`);
+    seen.add(signal);
+    if (!known.has(signal)) errors.push(`signals_seen に family の signals に無い値: ${signal}`);
+  }
+  const basis = thresholdBasis(family, { signals_seen: web.signals_seen });
+  if (web.family_confidence !== basis) errors.push(`family_confidence (${web.family_confidence}) が導出値 (${basis}) と違う`);
+  return errors;
+}

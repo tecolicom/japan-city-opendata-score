@@ -9,7 +9,7 @@ import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { loadYaml } from '../_lib/lib.mjs';
 import { assessmentSemanticErrors } from '../_lib/assessment-check.mjs';
-import { familySemanticErrors } from '../_lib/family-check.mjs';
+import { familySemanticErrors, webSemanticErrors, thresholdBasis } from '../_lib/family-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ajv = new Ajv({ allErrors: true, strict: true });
@@ -25,6 +25,7 @@ const a = loadYaml(join(root, 'scripts', '__tests__', '__fixtures__', 'assessmen
 const validate = (p) => validatePublisher(p) === true && assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno' }).length === 0;
 const pub = { ...a.publishers[1] };
 const pubBase = { ...pub, observed_at: '2026-10-23' };
+const DER = { derived_at: '2026-10-30', profile: 'dynamic', profile_revision: 'r1' };
 const inh = { family_id: 'fam-feedphp-sitenew', representative_handle: 'hanno' };
 
 test('fixture は妥当で、配信元ごとに行を持ち、自治体値は保存しない', () => {
@@ -66,11 +67,11 @@ test('status: gone は観測日と最終成功日を要求する', () => {
 });
 
 test('unknown な軸は 0 ではなく provenance が unknown', () => {
-  assert.ok(validate({ ...pub, axes: { A: null }, provenance: { A: 'unknown' } }));
-  assert.ok(!validate({ ...pub, axes: { A: 0 }, provenance: { A: 'unknown' } }), 'unknown に 0 点は付けられない');
-  assert.ok(!validate({ ...pubBase, axes: { A: null }, provenance: { A: 'measured' } }), 'measured なのに値が無い');
-  assert.ok(!validate({ ...pubBase, axes: { A: 10 } }), '由来の無い点数は不可');
-  assert.ok(!validate({ ...pubBase, axes: { A: 10 }, provenance: { A: 'unknown' } }));
+  assert.ok(validate({ ...pub, ...DER, axes: { A: null }, provenance: { A: 'unknown' } }));
+  assert.ok(!validate({ ...pub, ...DER, axes: { A: 0 }, provenance: { A: 'unknown' } }), 'unknown に 0 点は付けられない');
+  assert.ok(!validate({ ...pubBase, ...DER, axes: { A: null }, provenance: { A: 'measured' } }), 'measured なのに値が無い');
+  assert.ok(!validate({ ...pubBase, ...DER, axes: { A: 10 } }), '由来の無い点数は不可');
+  assert.ok(!validate({ ...pubBase, ...DER, axes: { A: 10 }, provenance: { A: 'unknown' } }));
 });
 
 test('B/C/D/E は inherited を禁じる', () => {
@@ -88,16 +89,16 @@ test('inherited は inherited_from を必須にし、observed_from は A/F の�
 });
 
 test('estimated は notes、measured は observed_at を要求する', () => {
-  assert.ok(!validatePublisher({ ...pub, axes: { B: 5 }, provenance: { B: 'estimated' } }));
-  assert.ok(validatePublisher({ ...pub, axes: { B: 5 }, provenance: { B: 'estimated' }, notes: '状況証拠: 同系統' }));
-  assert.ok(!validatePublisher({ ...pub, axes: { B: 5 }, provenance: { B: 'measured' } }));
-  assert.ok(validatePublisher({ ...pubBase, axes: { B: 5 }, provenance: { B: 'measured' } }));
+  assert.ok(!validatePublisher({ ...pub, ...DER, axes: { B: 5 }, provenance: { B: 'estimated' } }));
+  assert.ok(validatePublisher({ ...pub, ...DER, axes: { B: 5 }, provenance: { B: 'estimated' }, notes: '状況証拠: 同系統' }));
+  assert.ok(!validatePublisher({ ...pub, ...DER, axes: { B: 5 }, provenance: { B: 'measured' } }));
+  assert.ok(validatePublisher({ ...pubBase, ...DER, axes: { B: 5 }, provenance: { B: 'measured' } }));
 });
 
 test('軸の上限は配点を超えられない', () => {
-  assert.ok(validatePublisher({ ...pubBase, axes: { A: 20, B: 25, C: 20, D: 20, E: 15 }, provenance: { A: 'measured', B: 'measured', C: 'measured', D: 'measured', E: 'measured' } }));
-  assert.ok(!validatePublisher({ ...pubBase, axes: { A: 21 }, provenance: { A: 'measured' } }));
-  assert.ok(!validatePublisher({ ...pubBase, axes: { E: 16 }, provenance: { E: 'measured' } }));
+  assert.ok(validatePublisher({ ...pubBase, ...DER, axes: { A: 20, B: 25, C: 20, D: 20, E: 15 }, provenance: { A: 'measured', B: 'measured', C: 'measured', D: 'measured', E: 'measured' } }));
+  assert.ok(!validatePublisher({ ...pubBase, ...DER, axes: { A: 21 }, provenance: { A: 'measured' } }));
+  assert.ok(!validatePublisher({ ...pubBase, ...DER, axes: { E: 16 }, provenance: { E: 'measured' } }));
 });
 
 test('facts だけで axes が無くても妥当 (Task 9 の中間状態)', () => {
@@ -118,11 +119,59 @@ test('domain_name は url のホストと一致する', () => {
   assert.ok(!validate({ ...pub, domain_name: 'other.example.jp' }));
 });
 
-test('web.yaml: family が未特定でも記録でき、確度は enum', () => {
-  assert.ok(webValidate({ handle: 'hanno', family_id: 'fam-feedphp-sitenew', family_confidence: 'high', fingerprinted_at: '2026-10-23' }));
-  assert.ok(webValidate({ handle: 'hanno', family_id: null, family_confidence: 'none', fingerprinted_at: '2026-10-23' }));
-  assert.ok(!webValidate({ handle: 'hanno', family_id: 'fam-x', family_confidence: 'high' }));
-  assert.ok(!webValidate({ handle: 'hanno', family_id: 'fam-x', family_confidence: 'very', fingerprinted_at: '2026-10-23' }));
+const fam = loadYaml(join(root, 'families', 'fam-feedphp-sitenew.yaml'));
+const families = new Map([[fam.id, fam]]);
+const [S1, S2, S3] = fam.signals;
+const webOf = (seen, conf, id = fam.id) => ({ handle: 'hanno', family_id: id, family_confidence: conf, signals_seen: seen, fingerprinted_at: '2026-10-23' });
+const sig = (signal, method = 'html') => ({ signal, method });
+
+test('web.yaml: family が未特定でも記録でき、確度は導出値の enum', () => {
+  assert.ok(webValidate(webOf([sig(S1), sig(S2)], 'observed')), JSON.stringify(webValidate.errors));
+  assert.ok(webValidate(webOf([], 'none', null)));
+  assert.ok(!webValidate({ ...webOf([], 'none', null), signals_seen: undefined }), 'signals_seen は省略不可');
+  assert.ok(!webValidate(webOf([sig(S1)], 'high')), '主観 enum は不可');
+  assert.ok(!webValidate(webOf([], 'observed', null)), 'family_id null で none 以外は不可');
+  assert.ok(!webValidate(webOf([sig(S1)], 'none')), 'family があるのに none は不可');
+});
+
+test('family_confidence は thresholdBasis と同じ判定になる (導出値)', () => {
+  const cases = [
+    [[sig(S1), sig(S2)], 'observed'],
+    [[sig(S1), sig(S2, 'header')], 'observed'],
+    [[sig(S1), sig(S2, 'inferred_from_status')], 'inferred'],
+    [[sig(S1)], 'below'],
+    [[sig(S1, 'inferred_from_status')], 'below'],
+  ];
+  for (const [seen, want] of cases) {
+    assert.equal(thresholdBasis(fam, { signals_seen: seen }), want);
+    assert.deepEqual(webSemanticErrors(webOf(seen, want), families), [], want);
+    for (const other of ['observed', 'inferred', 'below'].filter((c) => c !== want)) {
+      assert.ok(webSemanticErrors(webOf(seen, other), families).some((e) => /導出値/.test(e)), `${want} を ${other} と書けてはならない`);
+    }
+  }
+  assert.deepEqual(webSemanticErrors(webOf([], 'none', null), families), []);
+  assert.ok(webSemanticErrors(webOf([sig(S1)], 'none', null), families).length > 0, 'null なのに signals_seen');
+  assert.ok(webSemanticErrors(webOf([sig(S1), sig(S1)], 'observed'), families).some((e) => /重複/.test(e)), '水増し');
+  assert.ok(webSemanticErrors(webOf([sig('/nowhere'), sig(S1)], 'observed'), families).some((e) => /signals に無い/.test(e)));
+  assert.ok(webSemanticErrors(webOf([], 'below', 'fam-nope'), families).length > 0, '未登録 family');
+  void S3;
+});
+
+test('axes は導出値: derived_at / profile / profile_revision を伴い、観測より後', () => {
+  const ax = { axes: { A: 10 }, provenance: { A: 'measured' }, observed_at: '2026-10-23' };
+  assert.ok(!validatePublisher({ ...pub, ...ax }), '導出の由来なしは不可');
+  const der = DER;
+  assert.ok(validate({ ...pub, ...ax, ...der }));
+  for (const k of Object.keys(der)) assert.ok(!validatePublisher({ ...pub, ...ax, ...der, [k]: undefined }), k);
+  assert.ok(!validate({ ...pub, ...ax, ...der, derived_at: '2026-10-01' }), '導出が観測より前');
+  assert.ok(validate({ ...pubBase, facts: { stable_url: true } }), 'facts だけなら導出の由来は不要');
+});
+
+test('moved も gone と同じく観測日と最終成功日を要求する', () => {
+  const m = { ...pub, status: 'moved', moved_to: 'https://new.example.jp/' };
+  assert.ok(!validatePublisher({ ...m, observed_at: '2026-10-23' }));
+  assert.ok(!validatePublisher({ ...m, last_success_at: '2026-10-21' }));
+  assert.ok(validate({ ...m, observed_at: '2026-10-23', last_success_at: '2026-10-21' }));
 });
 
 // 繰越: signals_seen の重複で観測数を水増しできてはならない
@@ -149,7 +198,7 @@ const runValidate = (files) => {
   return { code: r.status, out: r.stderr + r.stdout };
 };
 const good = {
-  'municipalities/saitama/hanno/web.yaml': 'handle: hanno\nfamily_id: fam-feedphp-sitenew\nfamily_confidence: high\nfingerprinted_at: 2026-10-23\n',
+  'municipalities/saitama/hanno/web.yaml': 'handle: hanno\nfamily_id: fam-feedphp-sitenew\nfamily_confidence: observed\nsignals_seen:\n  - {signal: /index.update.json, method: html}\n  - {signal: /news_list.html, method: html}\nfingerprinted_at: 2026-10-23\n',
   'municipalities/saitama/hanno/assessments/schedule-events.yaml': `domain: schedule-events
 surveyed_at: 2026-10-23
 publishers:
@@ -176,6 +225,11 @@ test('validate.mjs: 正しい assessment は通り、壊したものは落ちる
   const inheritedBad = broken('    url:', `    inherited_from: {family_id: fam-feedphp-sitenew, representative_handle: nobody}
     provenance: {A: inherited}
     axes: {A: 10}
+    derived_at: 2026-10-30
+    profile: dynamic
+    profile_revision: r1
     url:`);
   assert.notEqual(inheritedBad.code, 0, '代表実測でない handle からの継承');
+  const web = 'municipalities/saitama/hanno/web.yaml';
+  assert.notEqual(runValidate({ ...good, [web]: good[web].replace('observed', 'below') }).code, 0, '導出値と違う family_confidence');
 });

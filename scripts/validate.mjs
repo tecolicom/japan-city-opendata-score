@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
-import { familySemanticErrors } from './_lib/family-check.mjs';
+import { familySemanticErrors, webSemanticErrors } from './_lib/family-check.mjs';
 import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
 
 // --root <dir>: 検証対象のリポジトリルート (既定はこのスクリプトの親)。テストが壊したデータで落ちることを確かめるのに使う。
@@ -98,7 +98,7 @@ function checkMunicipalities() {
         if (errs.length === 0) {
           webFamily = web.family_id;
           if (web.handle !== handle) errors.push(`${at}/web.yaml: handle (${web.handle}) がディレクトリ名と一致しない`);
-          if (web.family_id && !families.has(web.family_id)) errors.push(`${at}/web.yaml: family_id が families/ に無い: ${web.family_id}`);
+          errors.push(...webSemanticErrors(web, families).map((e) => `${at}/web.yaml: ${e}`));
         }
       } else if (n === 'assessments') {
         for (const f of listFiles(join(dir, n))) {
