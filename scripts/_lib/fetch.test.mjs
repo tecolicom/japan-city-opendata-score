@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { politeFetch, robotsAllows, USER_AGENT, MIN_INTERVAL_MS, MAX_REDIRECTS } from './fetch.mjs';
@@ -80,6 +80,24 @@ test('robots.txt が取得できないとき (5xx) は取得を見送る', async
   assert.deepEqual(rec.urls(), [ROBOTS]);  // robots.txt を見に行っただけで本文は取っていない
 });
 
+// robots.txt の 4xx を一律で「無い = 全許可」と読むと、429 (叩きすぎだ) や
+// 403 (見せない) を取得の許可として解釈してしまう。しかも absent はディスクに焼かれるため
+// 再実行でも永久に固定される。許可と読めるのは 404 / 410 だけ。
+for (const code of [429, 403]) {
+  test(`robots.txt が ${code} のときは取得を見送り、覚えない`, async () => {
+    const cacheDir = freshCache();
+    const { rec, opts } = base({ cacheDir, recorder: { robotsStatus: code } });
+    const r = await politeFetch(TOP, opts);
+    assert.equal(r.status, 'robots-denied');
+    assert.equal(r.reason, 'robots-unavailable');
+    assert.equal(r.body, undefined);
+    assert.deepEqual(rec.urls(), [ROBOTS]);   // 本文を取りに行っていない
+    // 一時的な拒否を焼かない (再実行で永久に固定されないこと)
+    assert.equal(existsSync(join(cacheDir, 'robots')), false, 'robots.txt の取得失敗を焼いている');
+    assert.equal(existsSync(join(cacheDir, 'pages')), false, '一時的な拒否を焼いている');
+  });
+}
+
 test('robots.txt が 404 なら制限なしとして扱う', async () => {
   const { opts } = base({ recorder: { robotsStatus: 404 } });
   const r = await politeFetch(TOP, opts);
@@ -93,10 +111,12 @@ test('robots.txt はホストごとに 1 回しか取らない', async () => {
   assert.equal(rec.urls().filter((u) => u === ROBOTS).length, 1);
 });
 
-test('取得するのは robots.txt と指定 URL だけ (探索をしない)', async () => {
+test('取得するのは robots.txt と指定 URL だけ、各 1 回 (探索も再取得もしない)', async () => {
   const { rec, opts } = base();
   await politeFetch(TOP, opts);
-  assert.deepEqual([...new Set(rec.urls())].sort(), [TOP, ROBOTS].sort());
+  // 集合ではなく**列**を固定する。重複を潰すと「ページを 2 回叩く実装」も通ってしまう。
+  // 順序も固定されるので「robots.txt を先に見ている」ことの証拠にもなる。
+  assert.deepEqual(rec.urls(), [ROBOTS, TOP]);
 });
 
 // ---- robots.txt のパース ----

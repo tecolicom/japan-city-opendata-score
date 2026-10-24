@@ -206,7 +206,9 @@ async function robotsRecordFor(origin, ctx) {
   if (record === null) {
     const res = await requestFollowingRedirects(new URL('/robots.txt', origin).href, { ...ctx, interval: ctx.minIntervalMs });
     if (res.status === 'ok') record = { status: 'ok', body: res.body };
-    else if (res.status === 'http-error' && res.httpStatus >= 400 && res.httpStatus < 500) record = { status: 'absent' };
+    // 「robots.txt が無い」と読めるのは 404 / 410 だけ。4xx を一律で全許可にしてはいけない。
+    // 429 は「叩きすぎだ」、403 / 401 は「お前には見せない」であって、取得の許可ではない。
+    else if (res.httpStatus === 404 || res.httpStatus === 410) record = { status: 'absent' };
     else record = { status: 'unavailable' };
     // 取れなかった (5xx / 通信障害 / タイムアウト) ものはディスクに焼かない。
     // 一時障害で永久に「取得禁止」に固定されるのを避ける。
