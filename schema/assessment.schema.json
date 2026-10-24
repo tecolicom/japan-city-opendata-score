@@ -1,0 +1,507 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-public-data-index/main/schema/assessment.schema.json",
+  "title": "配信元単位の評価 (municipalities/<pref>/<handle>/assessments/<domain>.yaml)",
+  "description": "評価の単位は (自治体 × 情報領域 × 配信元)。自治体値は保存せず、配信元の行から導出する (導出規則は実データを見てから決める。ここでは固定しない)。調べていない項目は『書かない』ことで表す: facts にも axes にも既定値を置かない。",
+  "type": "object",
+  "required": [
+    "domain",
+    "publishers",
+    "surveyed_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "domain": {
+      "description": "schema/domains.yaml の id。ファイル名と一致し、domains.yaml に存在することは validate.mjs が検査する。",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "surveyed_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "publishers": {
+      "description": "このファイルが置かれた自治体で見つけた配信元。空は不可 (何も見つからなかった、は『調べた』ように見えるので、ファイルを置かないことで未調査を表す)。",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/publisher"
+      }
+    }
+  },
+  "$defs": {
+    "date": {
+      "type": "string",
+      "format": "date"
+    },
+    "axisKey": {
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G"
+      ]
+    },
+    "publisher": {
+      "type": "object",
+      "required": [
+        "id",
+        "name_ja",
+        "entity_type",
+        "domain_name",
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "<handle>/<publisher-slug>。非 lg.jp の配信元 (図書館など) は自治体をまたいで同名になるため、handle で名前空間化する。",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "name_ja": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entity_type": {
+          "description": "municipality=自治体本体 / gaikaku=外郭団体・図書館・公民館等 / shoko=商工会議所・商工会 / kanko=観光協会 / shitei-kanrisha=指定管理者 / kouiki=広域連合・一部事務組合。",
+          "enum": [
+            "municipality",
+            "gaikaku",
+            "shoko",
+            "kanko",
+            "shitei-kanrisha",
+            "kouiki"
+          ]
+        },
+        "shared_with": {
+          "description": "1 配信元を複数 handle が共有するとき (広域連合・ドメイン共有)、共有する全 handle。所有 handle (id の接頭辞) を含める。",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          }
+        },
+        "domain_name": {
+          "description": "url のホスト名と一致させる。",
+          "type": "string",
+          "minLength": 1
+        },
+        "place_id": {
+          "description": "Google Place ID。",
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "form": {
+          "description": "配信の形 (自由記述。語彙は実測後に固める)。",
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "description": "省略は active。gone は恒久的に消えた、moved は移転した。",
+          "enum": [
+            "active",
+            "gone",
+            "moved"
+          ]
+        },
+        "observed_at": {
+          "description": "facts / measured の値 / status を観測した日。",
+          "$ref": "#/$defs/date"
+        },
+        "last_success_at": {
+          "description": "最後に取得に成功した日 (status: gone で必須)。",
+          "$ref": "#/$defs/date"
+        },
+        "moved_to": {
+          "description": "移転先 URL (status: moved で必須)。",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "facts": {
+          "description": "観測した事実。点数ではない。書いた項目だけが『観測した』を意味する。書かない項目は未観測で、既定値を置かない。Task 9 はここだけを埋め、axes は Task 10 が段階表を当てて生成する。",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "conditional_get": {
+              "enum": [
+                "etag",
+                "last-modified",
+                "both",
+                "none"
+              ]
+            },
+            "feed_format": {
+              "type": "string",
+              "minLength": 1
+            },
+            "stable_url": {
+              "type": "boolean"
+            },
+            "edition_label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "license_text": {
+              "description": "サイト本文の転載はしない。要約か短い引用に留める。",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "standard_od": {
+              "type": "boolean"
+            }
+          }
+        },
+        "axes": {
+          "description": "軸の点数。null は未調査 (0 ではない)。Task 10 が facts から生成する。",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "A": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 20
+            },
+            "B": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 25
+            },
+            "C": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 20
+            },
+            "D": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 20
+            },
+            "E": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 15
+            },
+            "F": {
+              "description": "段階表が未確定のため上限は置かない。",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "G": {
+              "description": "段階表が未確定のため上限は置かない。",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "provenance": {
+          "description": "軸ごとの由来。inherited を許すのは A / F / G のみ (docs/index.md §4)。",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "A": {
+              "enum": [
+                "measured",
+                "inherited",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "B": {
+              "enum": [
+                "measured",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "C": {
+              "enum": [
+                "measured",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "D": {
+              "enum": [
+                "measured",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "E": {
+              "enum": [
+                "measured",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "F": {
+              "enum": [
+                "measured",
+                "inherited",
+                "estimated",
+                "unknown"
+              ]
+            },
+            "G": {
+              "enum": [
+                "measured",
+                "inherited",
+                "estimated",
+                "unknown"
+              ]
+            }
+          }
+        },
+        "inherited_from": {
+          "type": "object",
+          "required": [
+            "family_id",
+            "representative_handle"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "family_id": {
+              "type": "string",
+              "pattern": "^fam-[a-z0-9]+(-[a-z0-9]+)*$"
+            },
+            "representative_handle": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+            }
+          }
+        },
+        "observed_from": {
+          "description": "測定地点。A 軸と F 軸にのみ付く (キーをこの 2 つに限る)。省略は jp-residential。inherited の場合は代表実測の測定地点。",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "A": {
+              "enum": [
+                "jp-residential",
+                "overseas-ci"
+              ]
+            },
+            "F": {
+              "enum": [
+                "jp-residential",
+                "overseas-ci"
+              ]
+            }
+          }
+        },
+        "reachability": {
+          "description": "国外 IP からの到達性など、スコアに入れない遮断の構造化記録。",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "overseas_rest": {
+              "enum": [
+                "unknown",
+                "not_blocked",
+                "blocked",
+                "partial"
+              ]
+            }
+          }
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "description": "gone は観測日と最終成功日を要求する。",
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "gone"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "observed_at": true,
+              "last_success_at": true
+            },
+            "required": [
+              "observed_at",
+              "last_success_at"
+            ]
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "moved"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "observed_at": true,
+              "moved_to": true
+            },
+            "required": [
+              "observed_at",
+              "moved_to"
+            ]
+          }
+        },
+        {
+          "description": "facts を書くなら観測日が要る。",
+          "if": {
+            "type": "object",
+            "required": [
+              "facts"
+            ],
+            "properties": {
+              "facts": true
+            }
+          },
+          "then": {
+            "properties": {
+              "observed_at": true
+            },
+            "required": [
+              "observed_at"
+            ]
+          }
+        },
+        {
+          "description": "inherited の軸があるなら継承元が要る。",
+          "if": {
+            "type": "object",
+            "required": [
+              "provenance"
+            ],
+            "properties": {
+              "provenance": {
+                "not": {
+                  "additionalProperties": {
+                    "not": {
+                      "const": "inherited"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "inherited_from": true
+            },
+            "required": [
+              "inherited_from"
+            ]
+          }
+        },
+        {
+          "description": "measured の軸があるなら観測日が要る。",
+          "if": {
+            "type": "object",
+            "required": [
+              "provenance"
+            ],
+            "properties": {
+              "provenance": {
+                "not": {
+                  "additionalProperties": {
+                    "not": {
+                      "const": "measured"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "observed_at": true
+            },
+            "required": [
+              "observed_at"
+            ]
+          }
+        },
+        {
+          "description": "estimated の軸があるなら根拠を notes に書く。",
+          "if": {
+            "type": "object",
+            "required": [
+              "provenance"
+            ],
+            "properties": {
+              "provenance": {
+                "not": {
+                  "additionalProperties": {
+                    "not": {
+                      "const": "estimated"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "notes": true
+            },
+            "required": [
+              "notes"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

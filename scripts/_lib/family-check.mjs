@@ -8,7 +8,11 @@ export function familySemanticErrors(family) {
   const known = new Set(family.signals ?? []);
   const errors = [];
   for (const m of family.measured_representatives ?? []) {
+    const seen = new Set();
     for (const { signal } of m.signals_seen ?? []) {
+      // 同じ signal の二重記載は method が違っても重複。観測数 (thresholdBasis) を水増しできてしまう。
+      if (seen.has(signal)) errors.push(`measured_representatives[${m.handle}].signals_seen に重複した signal: ${signal}`);
+      seen.add(signal);
       if (!known.has(signal)) errors.push(`measured_representatives[${m.handle}].signals_seen に signals に無い値: ${signal}`);
     }
   }

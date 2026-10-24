@@ -1,0 +1,181 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Ajv from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
+import { loadYaml } from '../_lib/lib.mjs';
+import { assessmentSemanticErrors } from '../_lib/assessment-check.mjs';
+import { familySemanticErrors } from '../_lib/family-check.mjs';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const ajv = new Ajv({ allErrors: true, strict: true });
+addFormats(ajv);
+const schema = loadYaml(join(root, 'schema', 'assessment.schema.json'));
+ajv.addSchema(schema);
+const validateAssessment = ajv.getSchema(schema.$id);
+const validatePublisher = ajv.getSchema(`${schema.$id}#/$defs/publisher`);
+const webValidate = ajv.compile(loadYaml(join(root, 'schema', 'web.schema.json')));
+const a = loadYaml(join(root, 'scripts', '__tests__', '__fixtures__', 'assessment-hanno-schedule-events.yaml'));
+
+// schema と意味検査の両方を通って初めて妥当
+const validate = (p) => validatePublisher(p) === true && assessmentSemanticErrors({ domain: 'schedule-events', publishers: [p] }, { handle: 'hanno' }).length === 0;
+const pub = { ...a.publishers[1] };
+const pubBase = { ...pub, observed_at: '2026-10-23' };
+const inh = { family_id: 'fam-feedphp-sitenew', representative_handle: 'hanno' };
+
+test('fixture は妥当で、配信元ごとに行を持ち、自治体値は保存しない', () => {
+  assert.ok(validateAssessment(a), JSON.stringify(validateAssessment.errors));
+  assert.ok(Array.isArray(a.publishers));
+  assert.equal(a.municipality_score, undefined);
+  assert.ok(!validateAssessment({ ...a, municipality_score: 80 }), '自治体値の保存は schema が拒む');
+});
+
+// Review Focus 1: 非 lg.jp の id 衝突
+test('publisher id は handle で名前空間化される', () => {
+  assert.equal(a.publishers[1].id, 'hanno/lib-main');
+  assert.ok(!validatePublisher({ ...pub, id: 'lib-main' }), '名前空間なしは不可');
+  assert.ok(!validatePublisher({ ...pub, id: 'hanno/Lib Main' }));
+  // 別の自治体の「図書館」は同じ slug でも衝突しない
+  assert.notEqual('hanno/lib-main', 'hidaka/lib-main');
+  const errs = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [{ ...pub, id: 'hidaka/lib-main' }] }, { handle: 'hanno' });
+  assert.ok(errs.some((e) => /handle/.test(e)), '置かれた handle と id の接頭辞が違えば不可');
+  const dup = assessmentSemanticErrors({ domain: 'schedule-events', publishers: [pub, pub] }, { handle: 'hanno' });
+  assert.ok(dup.some((e) => /重複/.test(e)));
+});
+
+// Review Focus 2: 広域連合 / ドメイン共有
+test('複数 handle が 1 配信元を共有するとき shared_with を持てる', () => {
+  assert.ok(validate({ ...pub, entity_type: 'kouiki', shared_with: ['hanno', 'hidaka'] }));
+  assert.ok(!validatePublisher({ ...pub, shared_with: [] }));
+  assert.ok(!validatePublisher({ ...pub, shared_with: ['hanno', 'hanno'] }));
+  assert.ok(!validate({ ...pub, entity_type: 'kouiki', shared_with: ['hidaka', 'iruma'] }), '所有 handle を含まない共有は不可');
+});
+
+// Review Focus 3: 恒久的に消えた配信元
+test('status: gone は観測日と最終成功日を要求する', () => {
+  assert.ok(!validatePublisher({ ...pub, status: 'gone' }));
+  assert.ok(!validatePublisher({ ...pub, status: 'gone', observed_at: '2026-10-23' }));
+  assert.ok(!validatePublisher({ ...pub, status: 'gone', last_success_at: '2026-10-21' }));
+  assert.ok(validate({ ...pub, status: 'gone', observed_at: '2026-10-23', last_success_at: '2026-10-21' }));
+  assert.ok(!validate({ ...pub, status: 'gone', observed_at: '2026-10-01', last_success_at: '2026-10-21' }), '最終成功が観測より後は矛盾');
+  assert.ok(!validatePublisher({ ...pub, status: 'moved', observed_at: '2026-10-23' }), 'moved は移転先を要求する');
+});
+
+test('unknown な軸は 0 ではなく provenance が unknown', () => {
+  assert.ok(validate({ ...pub, axes: { A: null }, provenance: { A: 'unknown' } }));
+  assert.ok(!validate({ ...pub, axes: { A: 0 }, provenance: { A: 'unknown' } }), 'unknown に 0 点は付けられない');
+  assert.ok(!validate({ ...pubBase, axes: { A: null }, provenance: { A: 'measured' } }), 'measured なのに値が無い');
+  assert.ok(!validate({ ...pubBase, axes: { A: 10 } }), '由来の無い点数は不可');
+  assert.ok(!validate({ ...pubBase, axes: { A: 10 }, provenance: { A: 'unknown' } }));
+});
+
+test('B/C/D/E は inherited を禁じる', () => {
+  const p = { ...pub, inherited_from: inh };
+  for (const k of ['B', 'C', 'D', 'E']) assert.ok(!validatePublisher({ ...p, provenance: { [k]: 'inherited' } }), k);
+  for (const k of ['A', 'F', 'G']) assert.ok(validatePublisher({ ...p, provenance: { [k]: 'inherited' } }), k);
+});
+
+test('inherited は inherited_from を必須にし、observed_from は A/F のみ', () => {
+  assert.ok(!validatePublisher({ ...pub, provenance: { A: 'inherited' } }));
+  assert.ok(!validatePublisher({ ...pub, inherited_from: { family_id: 'fam-x' }, provenance: { A: 'inherited' } }));
+  assert.ok(validatePublisher({ ...pub, observed_from: { A: 'jp-residential', F: 'overseas-ci' } }));
+  assert.ok(!validatePublisher({ ...pub, observed_from: { B: 'jp-residential' } }), 'B に測定地点は付けない');
+  assert.ok(!validatePublisher({ ...pub, observed_from: { A: 'moon' } }));
+});
+
+test('estimated は notes、measured は observed_at を要求する', () => {
+  assert.ok(!validatePublisher({ ...pub, axes: { B: 5 }, provenance: { B: 'estimated' } }));
+  assert.ok(validatePublisher({ ...pub, axes: { B: 5 }, provenance: { B: 'estimated' }, notes: '状況証拠: 同系統' }));
+  assert.ok(!validatePublisher({ ...pub, axes: { B: 5 }, provenance: { B: 'measured' } }));
+  assert.ok(validatePublisher({ ...pubBase, axes: { B: 5 }, provenance: { B: 'measured' } }));
+});
+
+test('軸の上限は配点を超えられない', () => {
+  assert.ok(validatePublisher({ ...pubBase, axes: { A: 20, B: 25, C: 20, D: 20, E: 15 }, provenance: { A: 'measured', B: 'measured', C: 'measured', D: 'measured', E: 'measured' } }));
+  assert.ok(!validatePublisher({ ...pubBase, axes: { A: 21 }, provenance: { A: 'measured' } }));
+  assert.ok(!validatePublisher({ ...pubBase, axes: { E: 16 }, provenance: { E: 'measured' } }));
+});
+
+test('facts だけで axes が無くても妥当 (Task 9 の中間状態)', () => {
+  const p = { ...pubBase, facts: { conditional_get: 'etag', stable_url: true, standard_od: false } };
+  assert.equal(p.axes, undefined);
+  assert.ok(validate(p));
+});
+
+test('未調査を調査済みに見せない: facts があるなら観測日が要る / 空 facts は不可 / facts に未知の項目は不可', () => {
+  assert.ok(!validate({ ...pub, facts: { stable_url: true } }), '観測日なしの facts');
+  assert.ok(!validatePublisher({ ...pubBase, facts: {} }), '空の facts は「調べた」ように見える');
+  assert.ok(!validatePublisher({ ...pubBase, facts: { conditional_get: 'maybe' } }));
+  assert.ok(!validatePublisher({ ...pubBase, facts: { score: 90 } }));
+  assert.ok(validate(pub), '何も調べていない配信元は facts/axes 無しで記録できる');
+});
+
+test('domain_name は url のホストと一致する', () => {
+  assert.ok(!validate({ ...pub, domain_name: 'other.example.jp' }));
+});
+
+test('web.yaml: family が未特定でも記録でき、確度は enum', () => {
+  assert.ok(webValidate({ handle: 'hanno', family_id: 'fam-feedphp-sitenew', family_confidence: 'high', fingerprinted_at: '2026-10-23' }));
+  assert.ok(webValidate({ handle: 'hanno', family_id: null, family_confidence: 'none', fingerprinted_at: '2026-10-23' }));
+  assert.ok(!webValidate({ handle: 'hanno', family_id: 'fam-x', family_confidence: 'high' }));
+  assert.ok(!webValidate({ handle: 'hanno', family_id: 'fam-x', family_confidence: 'very', fingerprinted_at: '2026-10-23' }));
+});
+
+// 繰越: signals_seen の重複で観測数を水増しできてはならない
+test('signals_seen の同じ signal の二重記載は method が違ってもエラー', () => {
+  const f = loadYaml(join(root, 'families', 'fam-feedphp-sitenew.yaml'));
+  const rep = f.measured_representatives[0];
+  const s = rep.signals_seen[0].signal;
+  const withSeen = (seen) => ({ ...f, measured_representatives: [{ ...rep, signals_seen: seen }] });
+  assert.deepEqual(familySemanticErrors(f), []);
+  assert.ok(familySemanticErrors(withSeen([{ signal: s, method: 'html' }, { signal: s, method: 'html' }])).some((e) => /重複/.test(e)));
+  assert.ok(familySemanticErrors(withSeen([{ signal: s, method: 'html' }, { signal: s, method: 'inferred_from_status' }])).some((e) => /重複/.test(e)));
+});
+
+// 偽の緑が出ないこと: validate.mjs 自体が、壊した assessment で落ちる
+const runValidate = (files) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'jpdi-'));
+  symlinkSync(join(root, 'schema'), join(tmp, 'schema'));
+  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(tmp, rel)), { recursive: true });
+    writeFileSync(join(tmp, rel), body);
+  }
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  return { code: r.status, out: r.stderr + r.stdout };
+};
+const good = {
+  'municipalities/saitama/hanno/web.yaml': 'handle: hanno\nfamily_id: fam-feedphp-sitenew\nfamily_confidence: high\nfingerprinted_at: 2026-10-23\n',
+  'municipalities/saitama/hanno/assessments/schedule-events.yaml': `domain: schedule-events
+surveyed_at: 2026-10-23
+publishers:
+  - id: hanno/lib-main
+    name_ja: 図書館
+    entity_type: gaikaku
+    domain_name: lib.example.jp
+    url: https://lib.example.jp/
+`,
+};
+const A = 'municipalities/saitama/hanno/assessments/schedule-events.yaml';
+
+test('validate.mjs: 正しい assessment は通り、壊したものは落ちる (偽の緑なし)', () => {
+  assert.equal(runValidate(good).code, 0, runValidate(good).out);
+  const broken = (from, to) => runValidate({ ...good, [A]: good[A].replace(from, to) });
+  assert.notEqual(broken('hanno/lib-main', 'lib-main').code, 0, '名前空間なし');
+  assert.notEqual(broken('hanno/lib-main', 'hidaka/lib-main').code, 0, '別 handle の id');
+  assert.notEqual(broken('domain: schedule-events', 'domain: no-such-domain').code, 0, '未知の領域');
+  assert.notEqual(broken('domain: schedule-events', 'domain: public-wifi').code, 0, 'ファイル名と領域の不一致');
+  assert.notEqual(broken('entity_type: gaikaku', 'entity_type: gaikaku\n    status: gone').code, 0, 'gone で日付なし');
+  assert.notEqual(broken('    url:', '    municipality_score: 1\n    url:').code, 0, '未知のフィールド');
+  assert.notEqual(runValidate({ ...good, 'municipalities/saitama/hanno/memo.txt': 'x' }).code, 0, '知らないファイル');
+  assert.notEqual(runValidate({ ...good, 'municipalities/saitama/hanno/assessments/notes.md': 'x' }).code, 0, 'yaml でないファイル');
+  const inheritedBad = broken('    url:', `    inherited_from: {family_id: fam-feedphp-sitenew, representative_handle: nobody}
+    provenance: {A: inherited}
+    axes: {A: 10}
+    url:`);
+  assert.notEqual(inheritedBad.code, 0, '代表実測でない handle からの継承');
+});

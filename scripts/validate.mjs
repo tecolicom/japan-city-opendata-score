@@ -7,10 +7,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import { loadYaml } from './_lib/lib.mjs';
+import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
 import { familySemanticErrors } from './_lib/family-check.mjs';
+import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// --root <dir>: 検証対象のリポジトリルート (既定はこのスクリプトの親)。テストが壊したデータで落ちることを確かめるのに使う。
+// --registry <municipalities.yaml>: 指定されたら handle の実在も検査する (自前で採番しない)。
+const argOf = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
+const root = argOf('--root') ?? join(dirname(fileURLToPath(import.meta.url)), '..');
+const registryPath = argOf('--registry');
 const schemaDir = join(root, 'schema');
 const familiesDir = join(root, 'families');
 
@@ -60,11 +65,73 @@ function checkFamilies() {
   return errors;
 }
 
+// municipalities/<pref>/<handle>/{web.yaml, assessments/<domain>.yaml}。
+// municipalities/ が無いのは正常 (まだ実測が無い)。ただし中にある物は全部検査し、知らないファイルは落とす。
+function checkMunicipalities() {
+  const muniDir = join(root, 'municipalities');
+  if (!existsSync(muniDir)) return [];
+  const errors = [];
+  const validateWeb = ajv.compile(loadYaml(join(schemaDir, 'web.schema.json')));
+  const validateAssessment = ajv.compile(loadYaml(join(schemaDir, 'assessment.schema.json')));
+  const domains = new Map(loadYaml(join(schemaDir, 'domains.yaml')).domains.map((d) => [d.id, d]));
+  const families = new Map(existsSync(familiesDir)
+    ? listFiles(familiesDir).filter((n) => /\.ya?ml$/i.test(n)).map((n) => loadYaml(join(familiesDir, n))).map((f) => [f.id, f])
+    : []);
+  const registry = registryPath ? loadRegistry(registryPath) : null;
+  const yamlName = (n) => /\.ya?ml$/i.test(n);
+  const known = new Set(listMunicipalityDirs(root).map((m) => `${m.pref}/${m.handle}`));
+  for (const pref of listFiles(muniDir)) {
+    for (const n of listFiles(join(muniDir, pref))) {
+      if (!known.has(`${pref}/${n}`)) errors.push(`municipalities/${pref}/${n}: ディレクトリではない`);
+    }
+  }
+  const publisherIds = new Set();
+  for (const { pref, handle, dir } of listMunicipalityDirs(root)) {
+    const at = `municipalities/${pref}/${handle}`;
+    if (registry && !registry.has(handle)) errors.push(`${at}: handle が municipalities.yaml に無い`);
+    let webFamily;
+    for (const n of listFiles(dir)) {
+      if (n === 'web.yaml') {
+        const web = loadYaml(join(dir, n));
+        const errs = schemaErrors(validateWeb, web, `${at}/web.yaml`);
+        errors.push(...errs);
+        if (errs.length === 0) {
+          webFamily = web.family_id;
+          if (web.handle !== handle) errors.push(`${at}/web.yaml: handle (${web.handle}) がディレクトリ名と一致しない`);
+          if (web.family_id && !families.has(web.family_id)) errors.push(`${at}/web.yaml: family_id が families/ に無い: ${web.family_id}`);
+        }
+      } else if (n === 'assessments') {
+        for (const f of listFiles(join(dir, n))) {
+          const label = `${at}/assessments/${f}`;
+          if (!yamlName(f)) { errors.push(`${label}: yaml ではないファイル (対応する検証が未実装)`); continue; }
+          const a = loadYaml(join(dir, n, f));
+          const errs = schemaErrors(validateAssessment, a, label);
+          errors.push(...errs);
+          if (errs.length > 0) continue;
+          if (a.domain !== f.replace(/\.ya?ml$/i, '')) errors.push(`${label}: domain (${a.domain}) がファイル名と一致しない`);
+          errors.push(...assessmentSemanticErrors(a, { handle, domains, families }).map((e) => `${label}: ${e}`));
+          for (const p of a.publishers) {
+            if (publisherIds.has(p.id)) errors.push(`${label}: publisher id が他のファイルと重複: ${p.id}`);
+            publisherIds.add(p.id);
+            if (webFamily !== undefined && p.inherited_from && p.inherited_from.family_id !== webFamily) {
+              errors.push(`${label}: ${p.id} の inherited_from.family_id が web.yaml の family_id (${webFamily}) と違う`);
+            }
+          }
+        }
+      } else {
+        errors.push(`${at}/${n}: 対応する検証が未実装`);
+      }
+    }
+  }
+  return errors;
+}
+
 // 検証の一覧。files は schema/ 直下で、この検証が面倒を見るファイル。
 // schema/ にこれ以外のファイルがあれば「未実装」で落とす (known は files から導出する)。
 const validators = {
   'domains.yaml': { files: ['domains.yaml', 'domains.schema.json'], check: checkDomains },
   'families/*.yaml': { files: ['family.schema.json'], check: checkFamilies },
+  'municipalities/**': { files: ['assessment.schema.json', 'web.schema.json'], check: checkMunicipalities },
 };
 
 const errors = [];

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/tecolicom/japan-public-data-index/main/schema/web.schema.json",
+  "title": "自治体の web 基盤 (municipalities/<pref>/<handle>/web.yaml)",
+  "description": "指紋照合の結果。family が特定できなかったときも『照合した』事実は残す (family_id: null)。",
+  "type": "object",
+  "required": ["handle", "family_id", "family_confidence", "fingerprinted_at"],
+  "additionalProperties": false,
+  "properties": {
+    "handle": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "family_id": {
+      "type": ["string", "null"],
+      "pattern": "^fam-[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "family_confidence": { "enum": ["high", "medium", "low", "none"] },
+    "fingerprinted_at": { "type": "string", "format": "date" }
+  }
+}

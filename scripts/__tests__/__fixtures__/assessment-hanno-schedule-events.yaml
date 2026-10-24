@@ -1,0 +1,19 @@
+# テスト用の入れ物。実在の調査結果ではない (実測は Task 9)。
+domain: schedule-events
+surveyed_at: 2026-10-23
+publishers:
+  - id: hanno/city-news
+    name_ja: 飯能市 お知らせ (テスト用)
+    entity_type: municipality
+    domain_name: www.city.hanno.lg.jp
+    url: https://www.city.hanno.lg.jp/
+    facts:
+      conditional_get: etag
+      stable_url: true
+      standard_od: false
+    observed_at: 2026-10-23
+  - id: hanno/lib-main
+    name_ja: 飯能市立図書館 (テスト用)
+    entity_type: gaikaku
+    domain_name: lib.example.jp
+    url: https://lib.example.jp/
