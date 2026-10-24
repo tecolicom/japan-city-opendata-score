@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { copySchemaWithMiniProfile } from './_helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -224,7 +225,7 @@ test('signals_seen の同じ signal の二重記載は method が違ってもエ
 // 偽の緑が出ないこと: validate.mjs 自体が、壊した assessment で落ちる
 const runValidate = (files) => {
   const tmp = mkdtempSync(join(tmpdir(), 'jpdi-'));
-  symlinkSync(join(root, 'schema'), join(tmp, 'schema'));
+  copySchemaWithMiniProfile(root, tmp);
   symlinkSync(join(root, 'families'), join(tmp, 'families'));
   for (const [rel, body] of Object.entries(files)) {
     mkdirSync(dirname(join(tmp, rel)), { recursive: true });

@@ -1,17 +1,17 @@
-publisher_id,domain,A,B,C,D,E,total,rank,F,g_proxy,provenance,estimated
-chichibu/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-fukaya/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-gyoda/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-hanno/city-site,schedule-events,,,,,,,,10,0,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:measured,"A,B,C,D,E,F"
-higashimatsuyama/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-iruma/city-site,schedule-events,,,,,,,,10,0,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:measured,"A,B,C,D,E,F"
-kawagoe/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-koshigaya/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-kuki/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-kumagaya/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-sayama/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-shiki/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-toda/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-tokorozawa/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-wako/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
-warabi/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G"
+publisher_id,domain,A,B,C,D,E,total,rank,F,g_proxy,provenance,estimated,notes
+chichibu/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+fukaya/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+gyoda/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+hanno/city-site,schedule-events,,,,,,,,10,0,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:measured,"A,B,C,D,E,F",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。 / G: G はフィードのエンドポイント (https://www.city.hanno.lg.jp/cgi-bin/feed.php?siteNew=1&displayCount=5&displayRange=90&includeShortcut=1) が 5xx を返したことのみを根拠とする。この配信元の HTML ページは同時点で取得できている。配信元全体の継続性を観測したものではない。
+higashimatsuyama/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+iruma/city-site,schedule-events,,,,,,,,10,0,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:measured,"A,B,C,D,E,F",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。 / G: G はフィードのエンドポイント (https://www.city.iruma.saitama.jp/cgi-bin/feed.php?siteNew=1&displayCount=15&displayRange=90&includeShortcut=0) が 5xx を返したことのみを根拠とする。この配信元の HTML ページは同時点で取得できている。配信元全体の継続性を観測したものではない。
+kawagoe/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+koshigaya/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+kuki/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+kumagaya/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+sayama/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+shiki/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+toda/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+tokorozawa/city-site,schedule-events,,,,,,,,6,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: Last-Modified のみをトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+wako/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。
+warabi/city-site,schedule-events,,,,,,,,10,,A:unknown;B:unknown;C:unknown;D:unknown;E:unknown;F:estimated;G:unknown,"A,B,C,D,E,F,G",段階表の注記 — F: ETag と Last-Modified の両方をトップページで観測 (配信元 URL そのものでは未確認)。同じサイト基盤なので配信元も同様と推定。

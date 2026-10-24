@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { copySchemaWithMiniProfile } from './_helpers.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -20,7 +21,7 @@ test('webUrlErrors: レジストリと同じ URL (正規化して比較) は通�
 
 const run = (web, registry) => {
   const tmp = mkdtempSync(join(tmpdir(), 'webu-'));
-  symlinkSync(join(root, 'schema'), join(tmp, 'schema'));
+  copySchemaWithMiniProfile(root, tmp);
   symlinkSync(join(root, 'families'), join(tmp, 'families'));
   mkdirSync(join(tmp, 'municipalities/saitama/kawagoe'), { recursive: true });
   writeFileSync(join(tmp, 'municipalities/saitama/kawagoe/web.yaml'), web);
@@ -44,7 +45,7 @@ test('validate: レジストリと違う URL には根拠 (url_note) を強制�
 const web = (extra, h = 'kawagoe') => `handle: ${h}\nurl: https://www.city.example.jp/\nfingerprinted_at: 2026-10-24\n${extra}`;
 const runAt = (h, body) => {
   const tmp = mkdtempSync(join(tmpdir(), 'webd-'));
-  symlinkSync(join(root, 'schema'), join(tmp, 'schema'));
+  copySchemaWithMiniProfile(root, tmp);
   symlinkSync(join(root, 'families'), join(tmp, 'families'));
   mkdirSync(join(tmp, `municipalities/saitama/${h}`), { recursive: true });
   writeFileSync(join(tmp, `municipalities/saitama/${h}/web.yaml`), body);

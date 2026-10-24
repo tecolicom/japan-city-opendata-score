@@ -10,7 +10,7 @@ import addFormats from 'ajv-formats';
 import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
 import { familySemanticErrors, webSemanticErrors, webUrlErrors, representativeDivergenceErrors } from './_lib/family-check.mjs';
 import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
-import { checkProfile } from './score.mjs';
+import { checkProfile, profileBasisErrors } from './score.mjs';
 
 // --root <dir>: 検証対象のリポジトリルート (既定はこのスクリプトの親)。テストが壊したデータで落ちることを確かめるのに使う。
 // --registry <municipalities.yaml>: 指定されたら handle の実在も検査する (自前で採番しない)。
@@ -142,6 +142,18 @@ function loadProfilesMap() {
   return map;
 }
 
+// 全 assessment の配信元 (領域つき)。段階表の basis と突き合わせる実データ。
+function allPublishers() {
+  return listMunicipalityDirs(root).flatMap(({ dir }) => {
+    const adir = join(dir, 'assessments');
+    if (!existsSync(adir)) return [];
+    return listFiles(adir).filter((f) => /\.ya?ml$/i.test(f)).flatMap((f) => {
+      const a = loadYaml(join(adir, f));
+      return (a?.publishers ?? []).map((p) => ({ ...p, domain: a.domain }));
+    });
+  });
+}
+
 // schema/profiles/<name>.yaml (段階表とキャップ規則)。実物は Task 10 が置く。無い/空は正常。
 // 中にある物は全部検査し、yaml でないファイルと下位ディレクトリは「未実装」で落とす。
 function checkProfiles() {
@@ -158,6 +170,10 @@ function checkProfiles() {
     if (errs.length > 0) continue;
     if (prof.profile !== n.replace(/\.ya?ml$/i, '')) errors.push(`${label}: profile (${prof.profile}) がファイル名と一致しない`);
     try { checkProfile(prof); } catch (e) { errors.push(`${label}: ${e.message}`); continue; }
+    // 段の basis (observed / design) を、この段階表を領域に持つ配信元の facts と突き合わせる。
+    // observed の段に実データが当たらない、design の段に実データが当たる、のどちらも落とす (段階表が静かに嘘になるのを防ぐ)。
+    const domainIds = new Set(loadYaml(join(schemaDir, 'domains.yaml')).domains.filter((d) => d.profile === prof.profile).map((d) => d.id));
+    errors.push(...profileBasisErrors(prof, allPublishers().filter((p) => domainIds.has(p.domain))).map((e) => `${label}: ${e}`));
   }
   return errors;
 }

@@ -269,6 +269,11 @@ export function profileBasisErrors(profile, publishers) {
   return errors;
 }
 
+// applyProfile が生成する notes の接頭辞。assessment の notes がこれで始まれば、段階表が書いた文として扱う。
+const NOTE_PREFIX = '段階表の注記 — ';
+const isGenerated = (n) => typeof n === 'string' && (n.startsWith(NOTE_PREFIX) || n.startsWith('推定の根拠 — ')); // 後者は旧接頭辞
+export const generatedNote = (r) => (r.notes ? `${NOTE_PREFIX}${r.notes.join(' / ')}` : null);
+
 // 保存済みの axes が、いまの段階表を facts に当てた結果と一致するか。
 // axes は導出値なので、段階表を変えたのに再導出していない (版の上げ忘れ・当て直し忘れ) をここで拾う。
 // 段階表が定義する軸だけを比べる (他の軸は人が書いた値かもしれない)。inherited の軸は継承元の値なので比べない。
@@ -280,6 +285,10 @@ export function derivedAxesErrors(p, profile) {
   }
   let r;
   try { r = applyProfile(p.facts, profile); } catch (e) { return [...errors, e.message]; }
+  // 生成された notes (推定の根拠・観測の範囲) は手で消せない: 段階表が出す文と一致しなければ落とす。
+  const gen = generatedNote(r);
+  if (gen !== null && p.notes !== gen) errors.push(`notes が段階表の生成する注記と違う (観測の範囲の注記を消していないか。npm run apply-profile で書き直す)`);
+  if (gen === null && isGenerated(p.notes)) errors.push('notes に段階表の注記があるが、現在の段階表は注記を生成しない (npm run apply-profile で当て直す)');
   for (const k of Object.keys(profile.axes)) {
     if (p.provenance?.[k] === 'inherited') continue;
     if ((p.axes[k] ?? null) !== r.axes[k] || (p.provenance?.[k] ?? 'unknown') !== r.provenance[k]) {
@@ -293,13 +302,13 @@ export function derivedAxesErrors(p, profile) {
 const axisLabel = (k) => (k === 'G' ? 'g_proxy' : k);
 
 export function toCsv(rows) {
-  const head = ['publisher_id', 'domain', ...CORE_AXES, 'total', 'rank', ...DYNAMIC_AXES.map(axisLabel), 'provenance', 'estimated'];
+  const head = ['publisher_id', 'domain', ...CORE_AXES, 'total', 'rank', ...DYNAMIC_AXES.map(axisLabel), 'provenance', 'estimated', 'notes'];
   const lines = [head.join(',')];
   for (const { id, domain, row, caps } of rows) {
     const s = score(row, { caps });
     const { prov } = normalizeRow(row);
     const provStr = Object.entries(prov).map(([k, v]) => `${k}:${v}`).join(';');
-    lines.push([id, domain, ...CORE_AXES.map((k) => s.core[k]), s.core.total, s.core.rank, ...DYNAMIC_AXES.map((k) => s.dynamic[k] ?? null), provStr, s.estimated].map(csvCell).join(','));
+    lines.push([id, domain, ...CORE_AXES.map((k) => s.core[k]), s.core.total, s.core.rank, ...DYNAMIC_AXES.map((k) => s.dynamic[k] ?? null), provStr, s.estimated, row.notes ?? null].map(csvCell).join(','));
   }
   return `${lines.join('\n')}\n`;
 }
@@ -325,8 +334,6 @@ function prefOf() {
 
 // ---- --apply-profile: facts → axes を assessment ファイルに書き戻す ----
 
-const NOTE_PREFIX = '段階表の注記 — ';
-const isGenerated = (n) => typeof n === 'string' && (n.startsWith(NOTE_PREFIX) || n.startsWith('推定の根拠 — ')); // 後者は旧接頭辞
 const today = () => new Date().toISOString().slice(0, 10);
 
 // 1 ファイルに段階表を当てて書き戻す。コメントと整形は保つ (yaml の Document API)。
@@ -345,7 +352,7 @@ export function applyProfileToFile(path, root, { derivedAt = today() } = {}) {
     if (!profiles.has(name)) profiles.set(name, loadProfile(name, root));
     const profile = profiles.get(name);
     const r = applyProfile(p.facts, profile);
-    const gen = r.notes ? `${NOTE_PREFIX}${r.notes.join(' / ')}` : null;
+    const gen = generatedNote(r);
     const same = p.profile_revision === profile.revision && JSON.stringify(p.axes) === JSON.stringify(r.axes) && JSON.stringify(p.provenance) === JSON.stringify(r.provenance) && (p.notes ?? null) === gen;
     if (same) return;
     const at = (k) => ['publishers', i, k];
@@ -405,7 +412,7 @@ function main() {
   for (const [name, rs] of groups) {
     const agg = aggregate(rs.map((r) => r.row), { caps: rs[0].caps });
     console.log(`[${name}] コア合計: ${agg.n}/${agg.n_total} 行が 5 軸すべて measured (平均 ${agg.total.mean ?? '—'})`);
-    for (const [k, v] of Object.entries(agg.axes)) if (v.n_total > 0) console.log(`  ${axisLabel(k)}: measured ${v.n}/${v.n_total} (平均 ${v.mean ?? '—'})`);
+    for (const [k, v] of Object.entries(agg.axes)) if (v.n_total > 0) console.log(`  ${axisLabel(k)}: measured ${v.n}/${v.n_total} (平均 ${v.mean ?? '—'})${k === 'G' ? ' ※範囲はフィードのエンドポイント 1 つの可用性。配信元全体の継続性ではない (各行の notes)' : ''}`);
   }
 }
 

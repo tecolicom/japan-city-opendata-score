@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { copySchemaWithMiniProfile } from './_helpers.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, cpSync, symlinkSync, existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -270,7 +271,7 @@ test('段階表の caps も同じ形式で検査される', () => {
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const runValidate = (profiles) => {
   const tmp = mkdtempSync(join(tmpdir(), 'jpdi-prof-'));
-  cpSync(join(root, 'schema'), join(tmp, 'schema'), { recursive: true });
+  copySchemaWithMiniProfile(root, tmp);
   symlinkSync(join(root, 'families'), join(tmp, 'families'));
   for (const [rel, body] of Object.entries(profiles)) {
     mkdirSync(dirname(join(tmp, 'schema', 'profiles', rel)), { recursive: true });
@@ -455,4 +456,53 @@ test('G=0 の行の notes に根拠の範囲 (フィードのエンドポイン�
     const row = collectRows(root).find((x) => x.id === `${h}/city-site`).row;
     assert.match(row.notes, /フィードのエンドポイント/, h);
   }
+});
+
+// 配線の確認 (変異): 実物の repo を丸ごと写して壊し、validate.mjs (テストの関数ではなくゲート本体) が落ちること
+const mutate = (edit) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'jpdi-mut-'));
+  for (const d of ['schema', 'families', 'municipalities']) cpSync(join(root, d), join(tmp, d), { recursive: true });
+  edit(tmp);
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  return { code: r.status, out: r.stderr + r.stdout };
+};
+const editFile = (rel, from, to) => (tmp) => {
+  const f = join(tmp, rel);
+  const s = readFileSync(f, 'utf8');
+  assert.ok(s.includes(from), `変異の前提: ${rel} に ${from} がある`);
+  writeFileSync(f, s.replace(from, to));
+};
+const DYN = 'schema/profiles/dynamic.yaml';
+const IRUMA = 'municipalities/saitama/iruma/assessments/schedule-events.yaml';
+
+test('validate (ゲート本体): 変異していない実物は通る', () => {
+  const r = mutate(() => {});
+  assert.equal(r.code, 0, r.out);
+});
+
+test('validate (ゲート本体): basis の嘘 (observed に実データが無い / design に実データが当たる) で落ちる', () => {
+  // site-top の etag は実データが無い。observed を名乗らせる
+  const lie1 = mutate(editFile(DYN, '      basis: design\n      provenance: estimated\n      note: ETag のみ。', '      basis: observed\n      provenance: estimated\n      note: ETag のみ。'));
+  assert.notEqual(lie1.code, 0);
+  assert.match(lie1.out, /basis: observed だが実データが 1 件も当たらない/);
+  // site-top の both は実データが当たっている。design に戻す
+  const lie2 = mutate(editFile(DYN, '      basis: observed\n      provenance: estimated\n      note: ETag と Last-Modified の両方', '      basis: design\n      provenance: estimated\n      note: ETag と Last-Modified の両方'));
+  assert.notEqual(lie2.code, 0);
+  assert.match(lie2.out, /basis: design だが実データが/);
+});
+
+test('validate (ゲート本体): 生成された notes (観測の範囲の注記) を消す・書き換えると落ちる', () => {
+  const read = (tmp) => readFileSync(join(tmp, IRUMA), 'utf8');
+  const noNotes = mutate((tmp) => writeFileSync(join(tmp, IRUMA), read(tmp).replace(/\n    notes:[\s\S]*$/, '\n')));
+  assert.notEqual(noNotes.code, 0);
+  assert.match(noNotes.out, /notes/);
+  const edited = mutate(editFile(IRUMA, '配信元全体の継続性を観測したものではない', '配信元は継続性が無い'));
+  assert.notEqual(edited.code, 0);
+  assert.match(edited.out, /notes が段階表の生成する注記と違う/);
+});
+
+test('CSV に notes 列があり、G=0 の行は観測の範囲を持つ', () => {
+  const csv = toCsv(collectRows(root));
+  assert.match(csv.split('\n')[0], /,notes$/);
+  assert.match(csv, /hanno\/city-site[\s\S]*?フィードのエンドポイント/);
 });
