@@ -1,0 +1,14 @@
+handle: hanno
+url: https://www.city.hanno.lg.jp
+family_id: fam-feedphp-sitenew
+family_confidence: observed
+fingerprinted_at: 2026-10-24
+signals_seen:
+  - signal: /cgi-bin/feed.php?siteNew=
+    method: html
+  - signal: /index.update.json
+    method: html
+  - signal: /news_list.html
+    method: html
+  - signal: /theme/base/js/mutual_switching/
+    method: html

@@ -1,0 +1,10 @@
+handle: fukaya
+url: https://www.city.fukaya.saitama.jp/
+family_id: fam-feedphp-sitenew
+family_confidence: observed
+fingerprinted_at: 2026-10-24
+signals_seen:
+  - signal: /index.update.json
+    method: html
+  - signal: /theme/base/js/mutual_switching/
+    method: html

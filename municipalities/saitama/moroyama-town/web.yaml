@@ -1,0 +1,12 @@
+handle: moroyama-town
+url: https://www.town.moroyama.saitama.jp/
+registry_website: https://www.town.moroyama.saitama.jp/www/index.html
+url_note:
+  observed_at: 2026-10-24
+  reason: レジストリの website (https://www.town.moroyama.saitama.jp/www/index.html は
+    HTTP 404) だったため、ルート https://www.town.moroyama.saitama.jp/ を取得したところ HTTP 200
+    だった。観測に基づく代替
+family_id: null
+family_confidence: none
+fingerprinted_at: 2026-10-24
+signals_seen: []
