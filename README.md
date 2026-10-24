@@ -52,7 +52,7 @@
 
 - **CMS family: 1 件** (`fam-feedphp-sitenew`。**製品名は未特定**。指紋で群として同定できれば実用になる、というのが設計の前提)
 - **実測済み: 埼玉県 30 自治体** の web 基盤
-- **評価 (assessments): 0 件** — 段階表が未確定のため
+- **評価 (assessments): 埼玉の予定・催事 16 配信元** — F / G (`g_proxy`) だけを facts から導出。コア 5 軸は未調査 (`unknown`。0 点ではない)。F は全件 `estimated` (トップページでの観測)、G は 2 件が `measured`。段階表は `schema/profiles/dynamic.yaml`、裏付けの有無は docs/index.md §7
 
 埼玉 30 件の実測から分かったこと:
 

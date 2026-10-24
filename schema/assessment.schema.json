@@ -129,7 +129,7 @@
           "pattern": "^https?://"
         },
         "facts": {
-          "description": "観測した事実。点数ではない。書いた項目だけが『観測した』を意味する。書かない項目は未観測で、既定値を置かない。Task 9 はここだけを埋め、axes は Task 10 が段階表を当てて生成する。",
+          "description": "観測した事実。点数ではない。書いた項目だけが『観測した』を意味する。書かない項目は未観測で、既定値を置かない。axes はここに段階表を当てて生成する (npm run apply-profile)。",
           "type": "object",
           "minProperties": 1,
           "additionalProperties": false,
@@ -180,7 +180,7 @@
           }
         },
         "axes": {
-          "description": "軸の点数。null は未調査 (0 ではない)。Task 10 が facts から生成する。",
+          "description": "軸の点数。null は未調査 (0 ではない)。facts から段階表を当てて生成する。",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -225,7 +225,7 @@
               "maximum": 15
             },
             "F": {
-              "description": "段階表が未確定のため上限は置かない。",
+              "description": "上限は置かない (尺度は schema/profiles/dynamic.yaml。0〜10)。G は g_proxy (単発訪問の代理指標版)。",
               "type": [
                 "integer",
                 "null"
@@ -233,7 +233,7 @@
               "minimum": 0
             },
             "G": {
-              "description": "段階表が未確定のため上限は置かない。",
+              "description": "上限は置かない (尺度は schema/profiles/dynamic.yaml。0〜10)。G は g_proxy (単発訪問の代理指標版)。",
               "type": [
                 "integer",
                 "null"
