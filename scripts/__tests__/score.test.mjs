@@ -6,7 +6,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyProfile, score, aggregate, loadProfile, collectRows, distribution, profileBasisErrors, derivedAxesErrors, applyProfileToFile, toCsv } from '../score.mjs';
+import { applyProfile, score, aggregate, loadProfile, collectRows, collectAll, distribution, profileBasisErrors, derivedAxesErrors, applyProfileToFile, toCsv } from '../score.mjs';
 
 // 実物の schema/profiles/dynamic.yaml は Task 10 が作る。ここは形だけの inline fixture で、
 // 点数に意味は無い (段差をコードにもテストにも埋め込まないための検証用)。
@@ -404,21 +404,23 @@ const rootWith = (files) => {
 const GOMI_PUB = (extra) => `domain: gomi\nsurveyed_at: 2026-10-24\npublishers:\n  - id: hanno/city\n    name_ja: 市\n    entity_type: municipality\n    domain_name: example.jp\n    url: https://example.jp/\n    observed_at: 2026-10-24\n${extra}`;
 const GOMI_AXES = '    axes: {A: 10, B: 10, C: 10, D: 10, E: 10}\n    provenance: {A: measured, B: measured, C: measured, D: measured, E: measured}\n    facts: {stable_url: true}\n    derived_at: 2026-10-24\n    profile: static\n    profile_revision: gomi-1\n';
 
-test('static 領域: 段階表ファイルが無くても axes のある行は採点でき、F/G は出ない', () => {
+test('static 領域: 採点対象から除外して件数を返し (黙って捨てない)、facts だけの行は妥当', () => {
   assert.ok(!existsSync(join(root, 'schema', 'profiles', 'static.yaml')), '前提: static の段階表ファイルは置かない');
-  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/gomi.yaml': GOMI_PUB(GOMI_AXES) });
-  const rows = collectRows(tmp);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].caps, undefined, 'static のキャップは japan-gomi-data 側が持つ');
-  assert.equal(score(rows[0].row, { caps: rows[0].caps }).core.total, 50);
-  assert.deepEqual(score(rows[0].row).dynamic, {}, '静的領域に追加軸は無い');
+  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/gomi.yaml': GOMI_PUB('    facts: {stable_url: true}\n') });
+  const r = collectAll(tmp);
+  assert.deepEqual(r.rows, []);
+  assert.deepEqual(r.excluded.static, ['hanno/city']);
+  assert.equal(collectRows(tmp).length, 0);
 });
 
-test('static 領域: facts だけの行は導出できないので失敗する (黙って unknown にしない)', () => {
-  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/gomi.yaml': GOMI_PUB('    facts: {stable_url: true}\n') });
-  assert.throws(() => collectRows(tmp), /static/);
+test('static 領域: axes がある行は本 repo の段階表で導出できないので失敗する', () => {
+  const tmp = rootWith({ 'municipalities/saitama/hanno/assessments/gomi.yaml': GOMI_PUB(GOMI_AXES) });
+  assert.throws(() => collectAll(tmp), /static.*導出/);
+});
+
+test('プロファイル未判定の領域の facts だけの行も、除外して件数を返す', () => {
   const aed = rootWith({ 'municipalities/saitama/hanno/assessments/aed.yaml': GOMI_PUB('    facts: {stable_url: true}\n').replace('domain: gomi', 'domain: aed') });
-  assert.throws(() => collectRows(aed), /未判定/);
+  assert.deepEqual(collectAll(aed).excluded.unjudged, ['hanno/city']);
 });
 
 test('--apply-profile は冪等で、コメントを保ち、既存の notes を上書きしない', () => {

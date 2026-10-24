@@ -194,27 +194,26 @@ export function domainProfiles(root) {
   return new Map(loadYaml(join(root, 'schema', 'domains.yaml')).domains.map((d) => [d.id, d.profile ?? null]));
 }
 
-// 領域の profile から、この行に使う段階表を決める。
+// 領域の profile から、この行に使う段階表を決める。戻り値: {profile} か {excluded: 理由}
 //   dynamic など … schema/profiles/<name>.yaml を読む (無ければ loadProfile が失敗する)
-//   static       … 段階表は japan-gomi-data 側が持つ。本 repo は読まず、キャップも持たない。axes が既にある行だけ通し、
-//                  facts から導出する行は失敗する (導出できる段階表が無い)
-//   null (未判定) … axes を書けない領域。facts だけの行は失敗する
+//   static       … 段階表は japan-gomi-data 側が持ち、本 repo では採点しない (再採点しない方針)。採点対象から除外して件数を報告する。
+//                  facts だけの行は妥当 (中間状態)。axes がある行は本 repo の段階表で導出元を説明できないので失敗する
+//   null (未判定) … 段階表が無いので採点対象外 (除外して報告)。axes を書いた行は assessment-check が拒む
 function profileFor(p, domain, domains, profiles, root) {
   const name = p.profile ?? domains.get(domain) ?? null;
-  if (name === null) {
-    if (p.facts && !p.axes) throw new Error(`${p.id}: 領域 ${domain} はプロファイル未判定なので、facts から axes を導出できない`);
-    return null;
-  }
+  if (name === null) return { excluded: 'unjudged' };
   if (name === 'static') {
-    if (p.facts && !p.axes) throw new Error(`${p.id}: static 領域の段階表は japan-gomi-data 側にあり、本 repo では facts から導出できない (axes を書く)`);
-    return null;
+    if (p.axes) throw new Error(`${p.id}: static 領域の axes は本 repo の段階表で導出できない (導出元を説明できない)`);
+    return { excluded: 'static' };
   }
   if (!profiles.has(name)) profiles.set(name, loadProfile(name, root));
-  return profiles.get(name);
+  return { profile: profiles.get(name) };
 }
 
-export function collectRows(root) {
+// 採点対象の行と、除外した行 (static / 未判定) を返す。除外は黙って捨てず、呼び出し側が件数を報告する。
+export function collectAll(root) {
   const rows = [];
+  const excluded = { static: [], unjudged: [] };
   const profiles = new Map();
   const domains = domainProfiles(root);
   for (const { dir } of listMunicipalityDirs(root)) {
@@ -223,19 +222,23 @@ export function collectRows(root) {
     for (const f of readdirSync(adir).filter((n) => /\.ya?ml$/i.test(n)).sort()) {
       const a = loadYaml(join(adir, f));
       for (const p of a.publishers ?? []) {
-        const profile = profileFor(p, a.domain, domains, profiles, root);
+        const r = profileFor(p, a.domain, domains, profiles, root);
+        if (r.excluded) { excluded[r.excluded].push(p.id); continue; }
+        const { profile } = r;
         let row = p;
         if (p.facts && !p.axes) {
           // 点数がまだ無い行は、段階表を当てて出す (保存はしない。保存は --apply-profile)。
-          const r = applyProfile(p.facts, profile);
-          row = { ...p, axes: r.axes, provenance: r.provenance, profile: profile.profile };
+          const d = applyProfile(p.facts, profile);
+          row = { ...p, axes: d.axes, provenance: d.provenance, profile: profile.profile };
         }
-        rows.push({ id: p.id, domain: a.domain, row, caps: profile?.caps });
+        rows.push({ id: p.id, domain: a.domain, row, caps: profile.caps });
       }
     }
   }
-  return rows;
+  return { rows, excluded };
 }
+
+export const collectRows = (root) => collectAll(root).rows;
 
 // 段階表の basis と実データの突き合わせ。facts の行 (publishers) を段に当て、
 //   basis: observed の段に当たる行が 0 件 … 観測の裏付けが無いのに有るように見える
@@ -385,9 +388,11 @@ function main() {
     return;
   }
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const rows = collectRows(root);
+  const { rows, excluded } = collectAll(root);
   writeFileSync(join(root, 'docs', 'scores.csv'), toCsv(rows));
   console.log(`score: ${rows.length} 行 → docs/scores.csv`);
+  console.log(`score: static 領域の ${excluded.static.length} 行を採点対象外として除外 (段階表は japan-gomi-data 側)`);
+  console.log(`score: プロファイル未判定の領域の ${excluded.unjudged.length} 行を採点対象外として除外`);
   // キャップは profile ごとに違うので、集計も profile ごとに行う (profile 不明の行は上限なし)。
   const groups = Map.groupBy(rows, (r) => r.row.profile ?? '(profile なし)');
   for (const [name, rs] of groups) {

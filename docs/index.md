@@ -186,6 +186,8 @@ A 軸と F 軸の値は測定地点に依存する (国外 IP からだけ 403 �
 
 「両方」と「Last-Modified のみ」の点差 (10 対 6) 自体が設計判断。実測が示したのは、この 2 つが現実に分かれて存在すること (19 対 11) だけで、差の大きさは示していない。ETag のみと Last-Modified のみに優劣を付ける根拠は実測に無いので同点にした。
 
+**発見(次の調査者向け): F を実測にするには配信元 URL そのものを取得する必要があり、トップページの観測では代用できない。** 詳細は `docs/measurements/saitama-2026-10-24.md`。
+
 **帰結: 現時点の F は全 16 行が `estimated` なので、`measured` のみを数える集計では F の母数は 0。** 配信元そのもので条件付き GET を測った行が出て初めて `measured` が現れる。
 
 フィードの有無・更新日時の明示は、記録する facts が無い (フィードは 502 で観測できなかった) ので、段を置かなかった。観測できる事実が出てから足す。
@@ -212,7 +214,7 @@ axes のキーは `G` のままだが、段階表は `axis_aliases: {G: g_proxy}
 
 - **`axes` は導出値。** `npm run apply-profile` が facts に段階表を当てて axes・provenance・`derived_at`・`profile`・`profile_revision` を書き戻す (コメントは保つ。同じ版・同じ結果なら何も変えない)。
 - **`profile_revision` の照合。** `validate` が、assessment の `profile_revision` が `schema/profiles/<profile>.yaml` の `revision` と一致すること、保存済みの axes が facts から再導出した結果と一致することを検査する。段階表を変えたら `revision` を上げ、`apply-profile` で当て直す。
-- **static 領域は段階表ファイルを持たない** (§6)。`gomi` など static の行は、axes を書いた行だけが採点でき、キャップも本 repo は持たない。facts だけの static 行は導出できないので失敗する。プロファイル未判定の領域 (`profile: null`) の facts だけの行も失敗する。
+- **static 領域は段階表ファイルを持たず、本 repo では採点しない** (§6。再採点しない方針)。`score` は static の行を採点対象から除外し、除外した件数を毎回報告する(黙って素通りさせない)。facts だけの static 行は妥当な中間状態。axes を持つ static 行は、本 repo の段階表で導出元を説明できないので失敗する。プロファイル未判定の領域 (`profile: null`) の行も同様に除外して報告する。
 - **キャップの `when` は facts だけを見る。** 軸点や由来を条件にする必要は、現時点の実データに無い (今は不要)。必要になった時に語彙を足す。
 - **`min_signals` の既定**は `scripts/_lib/family-check.mjs` の `DEFAULT_MIN_SIGNALS` (2) が正典で、`fingerprint.mjs` もそれを読む。
 
