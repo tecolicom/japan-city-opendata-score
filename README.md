@@ -1,22 +1,100 @@
 # japan-public-data-index
 
-全国の自治体が web で発信する情報が「実際に使えるか」を、実測で評価する知識ベース。
+全国の自治体が web で発信する情報が「**実際に使えるか**」を、実測で評価する知識ベース。
 
-> 骨のみ。方針と構成は後続タスクで書き足す。
+評価は `(自治体 × 情報領域 × 配信元)` の組ごとに付く。同じデータが二つの顔を持つ:
 
-## 方針
+- **使う側**には「どの自治体の、どの情報が、どこから、どれだけの手間で取れるか」の地図
+- **自治体側**には「現状がどこで、理想がどこで、次に何を直せばいいか」の材料
 
-- 実測した事実を記録する。測れなかったものは `unknown` とし、0 点にはしない。
-- 合算した総合点は作らない。軸ごとに見る。
-- 軸の継承 (市区町村 → 配下) は A / F / G のみ。
+測るのは「オープンデータとして立派か」ではなく「**市民・開発者が実際に使えるか**」。公式カタログに載っていなくても、機械可読で取得できれば得点する。
+
+## 何が新しいか
+
+オープンデータの国際的な指標 (OECD OURdata Index、EU Open Data Maturity、Global Data Barometer) は、いずれも**国単位**で**自己申告・アンケート**に基づく。EU の方法論研究は自らの Quality 次元について「高得点が客観指標と相関しない」と指摘している。
+
+本 index は **自治体単位 × 実測 × 動的コンテンツ**を埋める。軸の名前は自前で発明せず、W3C [Data Quality Vocabulary](https://www.w3.org/TR/vocab-dqv/) の次元に対応づけている (A=Availability / C=Precision+Completeness / D=Licensing / E=Traceability / F=Timeliness↔Currentness)。
+
+情報領域の語彙は、デジタル庁の**自治体標準オープンデータセット** (基本編 14 + 応用編 8) を骨格とし、標準に無いもの (ごみ収集など) を拡張として足す。
+
+## 中核の原則
+
+**測っていない値を、測った値のように見せない。** これは標語ではなく、schema が構造で強制する:
+
+- 各軸の値は必ず**由来**を持つ — `measured` / `inherited` / `estimated` / `unknown`
+- **`unknown` は 0 点ではない。** 値を持たない (null)。未調査の自治体が「悪い」ように見えるのは評価として誤り
+- **コア合計は 5 軸すべてが値を持つときだけ出す。** 1 軸でも `unknown` なら合計は null。部分和を 100 点満点として見せない
+- **継承できるのは A / F / G のみ。** CMS family の代表実測から継承する。B (機械可読性) / C (粒度) / D (ライセンス) / E (検証可能性) は自治体の運用が決めるので継承できない
+- **指紋の観測方法を記録する。** HTML に現れたのか、応答から推定したのかを区別する。推定だけで閾値を満たす同定は、観測で満たしたものより弱いとデータから導出できる
+- **コア 100 点と追加軸 (F・G) を合算した総合点は作らない。** 合算するとコア部分の横断比較が壊れる
+
+正典は [`docs/index.md`](docs/index.md)。配点・ランク閾値・由来の扱いはそこが決める。
+
+## 構成
+
+| 場所 | 内容 |
+|---|---|
+| [`docs/index.md`](docs/index.md) | **指標の正典** — コア 5 軸・配点・由来・測定地点・プロファイル規約 |
+| `schema/domains.yaml` | 情報領域の語彙 (自治体標準オープンデータセット 22 件 + 拡張) |
+| `schema/*.schema.json` | family / web / assessment / profile の JSON Schema |
+| `families/<id>.yaml` | **CMS 系統ごとの指紋と取得口。** 代表実測から群全体に展開する仕組み |
+| `municipalities/<県>/<handle>/web.yaml` | 自治体ごとの基盤 (family 判定・指紋・実際に使った URL) |
+| `municipalities/<県>/<handle>/assessments/<領域>.yaml` | 領域ごとの評価 (配信元単位) |
+| `scripts/` | 指紋採取・採点・検証 |
+
+`handle` は [tecolicom/city-tecoli-data](https://github.com/tecolicom/city-tecoli-data) の `municipalities.yaml` (lg.jp ドメイン準拠、全 1,786 件) を引く。**自前で採番しない。**
+
+## 収録状況
+
+一人で全国 1,786 自治体を調べるのは不可能である。本 index は完成品のデータセットではなく、**各自治体や住民が自分の街ぶんを足していける土台**として作っている。
+
+現時点:
+
+- **CMS family: 1 件** (`fam-feedphp-sitenew`。**製品名は未特定**。指紋で群として同定できれば実用になる、というのが設計の前提)
+- **実測済み: 埼玉県 30 自治体** の web 基盤
+- **評価 (assessments): 0 件** — 段階表が未確定のため
+
+埼玉 30 件の実測から分かったこと:
+
+| 項目 | 結果 |
+|---|---|
+| `fam-feedphp-sitenew` に該当 | 6 件 |
+| どの family にも未同定 | 24 件 |
+| 条件付き GET (ETag / Last-Modified) | **全 30 件が対応** (非対応 0 件) |
+
+## 取得の礼儀 (貢献する人は必ず読むこと)
+
+対象は**他者の、それも公共機関のサーバ**である。以下は交渉の余地がない:
+
+- **robots.txt を尊重する。指紋採取も例外ではない**
+- **1 自治体あたりトップページ 1 回が基本** (robots.txt はホストごと 1 回でキャッシュ)
+- **リクエスト間隔は 2 秒以上、同時実行は 1**
+- **取得結果をキャッシュし、再実行で再取得しない**
+- **User-Agent に実在する連絡先 URL を入れる**
+- **脆弱性探索をしない。** 管理画面のパス探索・既知脆弱性の試行・認証の試験を一切行わない。取得するのは公開ページと robots.txt だけ
+- **調査対象サイトの本文を repo に取り込まない**
+
+これらは `scripts/_lib/fetch.mjs` の `politeFetch` が実装している。**素の `fetch` を直接呼ばないこと。** リダイレクト先のホストが変われば、そのホストの robots.txt を改めて確認してから進む (RFC 9309 では robots.txt は authority 単位)。
 
 ## 使い方
 
 ```
 make setup   # 依存を入れる
-make test    # 全ゲート
+make test    # 全ゲート (schema 検証 + ESLint + 単体テスト)
+make help    # コマンド一覧
 ```
 
 ## ライセンス
 
-データは CC0 または CC BY 4.0、文書は CC BY 4.0 (`LICENSE`)。
+**CC BY 4.0** ([`LICENSE`](LICENSE))。出典を明記すれば自由に利用できる。
+
+データも文書も同じライセンスとする。収録しているのは我々の独自の調査・分析であり、帰属表示を求めるのが筋であるため。
+
+## 関連
+
+- [tecolicom/japan-gomi-data](https://github.com/tecolicom/japan-gomi-data) — 姉妹 repo。ごみ収集日のオープンデータ。本 index のコア 5 軸はここで確立した指標を継承している
+- [tecolicom/city-tecoli-data](https://github.com/tecolicom/city-tecoli-data) — 自治体レジストリ (handle の正典)
+
+---
+
+収録手順書 (`docs/playbook.md`)、貢献の入口 (`CONTRIBUTING.md`)、エージェント向けの手引き (`AGENTS.md`) は**未整備**。
