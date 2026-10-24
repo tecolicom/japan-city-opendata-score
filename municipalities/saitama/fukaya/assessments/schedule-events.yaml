@@ -9,7 +9,7 @@ publishers:
     form: イベントカレンダー (HTML) と催し新着一覧。facts.conditional_get は自治体サイトのトップページで観測 (配信元の URL
       そのものではない)。facts.feed_http_status は
       https://www.city.fukaya.saitama.jp/cgi-bin/feed.php?siteNew=1&displayCount=10&displayRange=90&includeShortcut=0
-      の取得結果 (2026-10-24 に 1 回)
+      の取得結果 (2026-10-24 に 1 回)。このフィード URL は family の feed_patterns から組み立てた 1 回きりの確認で、トップページ上の href ではない。そのサイトがこの URL でフィードを公開していることは確認していない
     observed_at: 2026-10-24
     facts:
       conditional_get: both

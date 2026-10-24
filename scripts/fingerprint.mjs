@@ -136,7 +136,7 @@ async function main() {
         ...(rep && rep.id !== familyId ? {
           family_divergence: {
             observed_at: today,
-            reason: `自動指紋はトップページ HTML だけを読み、${rep.id} の signal は ${signals_seen.length} 本だった (閾値 ${rep.min_signals ?? 2})。family の代表実測 (${repRec.observed_at}) の根拠: ${repRec.evidence}。測っているものが違い、どちらも観測として正しい`,
+            reason: `自動指紋はトップページ HTML だけを読み、${rep.id} の signal は ${signals_seen.length} 本だった (閾値 ${rep.min_signals ?? 2})。family の代表実測 (${repRec.observed_at}) の根拠: ${repRec.evidence}。family 側の記録には feed.php の応答 (502) からエンドポイントの存在を推定したもの (inferred_from_status) が含まれ、自動指紋はトップページ HTML だけを読むのでこの推定を含まない。測っているものが違う`,
           },
         } : {}),
       };

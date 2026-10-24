@@ -17,4 +17,6 @@ family_divergence:
   reason: "自動指紋はトップページ HTML だけを読み、fam-feedphp-sitenew の signal は 1 本だった (閾値
     2)。family の代表実測 (2026-10-23) の根拠: トップページ HTML の実地取得。加えて
     /cgi-bin/feed.php?siteNew=... が 502 を返す (= エンドポイントが存在する。非該当の tokorozawa /
-    sayama / chichibu は 404)。測っているものが違い、どちらも観測として正しい"
+    sayama / chichibu は 404)。family 側の記録には feed.php の応答 (502)
+    からエンドポイントの存在を推定したもの (inferred_from_status) が含まれ、自動指紋はトップページ HTML
+    だけを読むのでこの推定を含まない。測っているものが違う"
