@@ -19,13 +19,13 @@
 - **小さく始める:** 3〜4 件で止め、リクエスト数・間隔・robots 判定・キャッシュを確認してから広げる
 - **陰性対照を混ぜる:** 既知 family に該当しない自治体を 1 つ入れ、「当たらない」ことを確認する
 - **ユーザーの承認なしに取得を広げない。** 取得は外部への副作用なので、件数と対象を示して確認を取る
-- キャッシュ (`cache/`) にある自治体は、手順を踏み直しても再取得されない (`fromCache: true`)。まずキャッシュで済むか確かめる
+- キャッシュ (`cache/`) は共有されない。初回は実際に取得が発生する (だから上の制約がある)。キャッシュにある自治体は、手順を踏み直しても再取得されない (`fromCache: true`)。まずキャッシュで済むか確かめる
 
 ## 守る規則
 
 - **handle を自分で綴らない。** レジストリ (`../city-tecoli-data/municipalities/municipalities.yaml`) から引く。町村は `-town` / `-village` 付き (例 `ogose-town`)
 - **URL を handle から組み立てない。** レジストリの `website` を使う。古ければレジストリを直さず、`web.yaml` に `url` + `registry_website` + `url_note` を書く
-- **`npm run validate` は必ず `--registry ../city-tecoli-data/municipalities/municipalities.yaml` 付きで実行する。** 付けないと handle の実在と URL の整合が検査されない (CI も付けていない)
+- **`npm run validate` はレジストリ照合が既定で有効** (`--registry` > 環境変数 `REGISTRY_PATH` > 隣の `../city-tecoli-data/…`)。見つからなければ落ちる。出力末尾の `レジストリ照合あり` を確認する。`--no-registry` はテスト専用で、実データには使わない
 - **未確認と不在は別。** `standard_od: false` は悉皆確認の後だけ。案内ページ 1 枚では書かず、未確認のまま残す
 - **観測と推定を分ける。** `signals_seen[].method`、`conditional_get_scope`、`provenance` で区別する。推定は `estimated` + `notes` に根拠
 - **何を測ったかを狭く書く。** 根拠の範囲を超える一般化をしない
@@ -42,15 +42,15 @@
 ```
 make setup                          依存を入れる
 make test                           全ゲート (validate + ESLint + 単体テスト)
-npm run new -- --handle <h>         自治体の足場 (県はレジストリから導出)
-npm run fingerprint -- --pref <p> --handles a,b [--limit N]   指紋採取 (取得を伴う)
+make new HANDLE=<h>                 自治体の足場 (= npm run new -- --handle <h>。県はレジストリから導出)
+make fingerprint PREF=<p> HANDLES=a,b [LIMIT=N]   指紋採取 (取得を伴う。= npm run fingerprint -- --pref …)
 npm run apply-profile [-- --pref <p>]   facts から axes を導出して書き戻す
 npm run score                       採点して docs/scores.csv を更新
 npm run score -- --pref <p> --distribution   facts の分布 (取得なし)
-npm run validate -- --registry ../city-tecoli-data/municipalities/municipalities.yaml
+npm run validate                    スキーマ + レジストリ照合 (必須)
 ```
 
-`make` にあるのは `setup` / `test` / `lint` / `score` だけ。`new` / `fingerprint` / `apply-profile` は `npm run`。
+`apply-profile` と `score --distribution` は `npm run` のみ。
 
 ## データの単位
 

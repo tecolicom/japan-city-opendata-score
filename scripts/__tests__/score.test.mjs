@@ -277,7 +277,7 @@ const runValidate = (profiles) => {
     mkdirSync(dirname(join(tmp, 'schema', 'profiles', rel)), { recursive: true });
     writeFileSync(join(tmp, 'schema', 'profiles', rel), body);
   }
-  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--no-registry'], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout, tmp };
 };
 const GOOD = 'profile: dynamic\nrevision: 2026-01-01.1\naxes:\n  F:\n    - when: {conditional_get: both}\n      points: 20\n      basis: design\ncaps:\n  - when: {partial: true}\n    max: 59\n';
@@ -463,7 +463,7 @@ const mutate = (edit) => {
   const tmp = mkdtempSync(join(tmpdir(), 'jpdi-mut-'));
   for (const d of ['schema', 'families', 'municipalities']) cpSync(join(root, d), join(tmp, d), { recursive: true });
   edit(tmp);
-  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--no-registry'], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout };
 };
 const editFile = (rel, from, to) => (tmp) => {

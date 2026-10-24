@@ -49,7 +49,7 @@ const runAt = (h, body) => {
   symlinkSync(join(root, 'families'), join(tmp, 'families'));
   mkdirSync(join(tmp, `municipalities/saitama/${h}`), { recursive: true });
   writeFileSync(join(tmp, `municipalities/saitama/${h}/web.yaml`), body);
-  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--no-registry'], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout };
 };
 const S = '/theme/base/js/mutual_switching/';
@@ -69,4 +69,30 @@ test('AD: 代表実測に載っている handle が family と食い違うなら
   const ok = `${miss}family_divergence:\n  observed_at: 2026-10-24\n  reason: 自動指紋はトップ HTML のみ\n`;
   assert.equal(runAt('hanno', web(ok, 'hanno')).code, 0, runAt('hanno', web(ok, 'hanno')).out);
   assert.notEqual(runAt('kawagoe', web(ok)).code, 0, '代表実測でないのに family_divergence');
+});
+
+// Ruling AL: レジストリ照合はゲートの既定。見つからなければ黙って飛ばさず落ちる (4 回目の「配線されていない検査」)
+const gate = (args, env = {}) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'webg-'));
+  copySchemaWithMiniProfile(root, tmp);
+  symlinkSync(join(root, 'families'), join(tmp, 'families'));
+  mkdirSync(join(tmp, 'municipalities/saitama/kawagoe'), { recursive: true });
+  writeFileSync(join(tmp, 'municipalities/saitama/kawagoe/web.yaml'), base);
+  writeFileSync(join(tmp, 'reg.yaml'), reg('https://www.city.hanno.lg.jp'));
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, ...args(tmp)], { encoding: 'utf8', env: { ...process.env, REGISTRY_PATH: '', ...env } });
+  return { code: r.status, out: r.stderr + r.stdout };
+};
+
+test('AL: レジストリが見つからなければ validate は落ちる (黙ってスキップしない)', () => {
+  const r = gate((t) => ['--registry', join(t, 'nonexistent.yaml')]);
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /レジストリが無い/);
+});
+
+test('AL: 環境変数 REGISTRY_PATH でも指定でき、handle の綴り違いは落ちる', () => {
+  const t = mkdtempSync(join(tmpdir(), 'webg2-'));
+  writeFileSync(join(t, 'reg.yaml'), '- {code: "11209", handle: hanno, name_ja: 飯能市, type: city, website: "https://www.city.hanno.lg.jp"}\n');
+  const bad = gate(() => [], { REGISTRY_PATH: join(t, 'reg.yaml') });
+  assert.notEqual(bad.code, 0, 'kawagoe はこのレジストリに無い');
+  assert.match(bad.out, /handle が municipalities.yaml に無い/);
 });

@@ -4,9 +4,9 @@
 
 **この手順書が前提にする事実 (2026-10-24 時点):**
 
-- `npm run validate` は**引数なしだとレジストリ照合をしない**。handle の実在も、`web.yaml` の `url` とレジストリ `website` の整合も、**`--registry` を付けたときだけ**検査される。CI (`npm test`) は付けていない。**自分で付けて実行すること** (§Step 7)。
-- Makefile に `new` / `fingerprint` は無い。足場と指紋採取は `npm run` で呼ぶ。
-- 取得結果のキャッシュ (`cache/`) は git 管理外。クローンした直後は空で、指紋採取で初めて作られる。
+- **`npm run validate` はレジストリ (`municipalities.yaml`) を必須とし、見つからなければ落ちる。** handle の実在と、`web.yaml` の `url` とレジストリ `website` の整合を検査する。レジストリは `--registry <path>` > 環境変数 `REGISTRY_PATH` > 隣の `../city-tecoli-data/municipalities/municipalities.yaml` の順で探す。CI も同じ (レジストリを checkout して `REGISTRY_PATH` で渡す)。以前は `--registry` を付けたときだけ効き、CI は付けておらず検査が素通りしていた (4 回目の「配線されていない検査」。Ruling AL で直した)
+- 足場と指紋採取は `make new HANDLE=<h>` / `make fingerprint PREF=<県> HANDLES=a,b` でも呼べる (実体は `npm run`)
+- 取得結果のキャッシュ (`cache/`) は git 管理外で共有されない。**クローンした直後は空で、初回は実際に取得が発生する。** だから取得の礼儀の制約がある (これは正常。`politeFetch` が robots を確認して取得し、キャッシュを作る)。
 
 ## 全体像
 
@@ -14,12 +14,12 @@
 |---|---|---|---|
 | 0 | 環境を整える | `make setup` | なし |
 | 1 | レジストリから handle を引く | `municipalities.yaml` を検索 | なし |
-| 2 | 足場を作る | `npm run new -- --handle <h>` | なし |
+| 2 | 足場を作る | `make new HANDLE=<h>` (= `npm run new -- --handle <h>`) | なし |
 | 3 | 指紋を採る (自治体につき 1 回) | `npm run fingerprint -- --pref <p> --handles <h>` → `web.yaml` | トップ 1 + robots 1 |
 | 4 | family 判定の結果を読む | `web.yaml` の `family_id` / `family_confidence` | なし |
 | 5 | 配信元を洗い出す | 取得済みトップページのリンク → `assessments/<領域>.yaml` | なし (取得は別判断) |
 | 6 | 観測した事実だけを facts に書き、軸を導出する | `npm run apply-profile` | なし |
-| 7 | 検査する (**`--registry` 付き**) | `npm run validate -- --registry …` | なし |
+| 7 | 検査する (レジストリ照合は既定で有効) | `npm run validate` | なし |
 | 8 | 全ゲートを通してコミット | `npm test` | なし |
 
 ## 絶対に守る (取得の礼儀)
@@ -43,12 +43,12 @@ grep -B2 -A8 'name_ja: 越生町' ../city-tecoli-data/municipalities/municipalit
 
 罠: 越生町の handle は `ogose` ではなく **`ogose-town`**。町村は `-town` / `-village` の接尾辞が付く。推測で `ogose` と打つと `npm run new` が「handle がレジストリに無い」で止まる (止まるのが正しい)。
 
-レジストリは `../city-tecoli-data/` (この repo の隣) にある前提。別の場所なら `--registry <path>`。
+レジストリは `../city-tecoli-data/` (この repo の隣) にある前提。別の場所なら `REGISTRY_PATH` か `--registry <path>`。
 
 ## Step 2. 足場
 
 ```
-npm run new -- --handle ogose-town
+make new HANDLE=ogose-town       # または npm run new -- --handle ogose-town
 ```
 
 `municipalities/<県>/<handle>/` ができる。県ディレクトリは code から導出され、`--pref` を渡して食い違えば失敗する。出力の 3 列目は取得の起点 URL (レジストリの `website`)。
@@ -63,7 +63,7 @@ npm run new -- --handle ogose-town
 
 - 埼玉だけでも `www.city.saitama.jp` / `www.city.kawagoe.saitama.jp` / `www.city.kumagaya.lg.jp` とばらばらで、**`lg.jp` ですらない自治体が多数**
 - 「`city.<label>.lg.jp` のはず」と組み立てて 3 件とも取得できなかった実例がある (この repo の最初の実行)。`www.` の有無も一定でない
-- `website` が空の自治体は `no-verified-url` で止まる。**止まったら調査者が URL を決めるが、その根拠 (どこで見つけたか) を `url_note` に書く**
+- `website` が空の自治体は `no-verified-url` で止まる。現状 (1,786 件すべてに URL がある) そういう自治体は無い。**将来出たら推測しない。`web.yaml` を作らず、未解決として記録して相談する**
 
 ### レジストリの website が古いとき
 
@@ -72,7 +72,7 @@ npm run new -- --handle ogose-town
 - **レジストリ (生成物) を手で直さない。** 直しても次の生成で消え、出典データの古さの記録も失われる
 - 指紋採取 CLI は、`website` が 404/410 でパスを持つときだけ、サイトのルートを 1 回試す。成功すると `web.yaml` に `url` (実際に使った URL)、`registry_website` (レジストリの値)、`url_note` (日付と根拠) が自動で入る
 - これ以外の代替 URL を試すときは、**使った URL と根拠を自分で `web.yaml` に書く** (`registry_website` + `url_note.observed_at` + `url_note.reason`)。推測ではなく観測に基づく理由を書く
-- `url` とレジストリの `website` が違うのに `registry_website` / `url_note` が無いと、`validate --registry` が落ちる
+- `url` とレジストリの `website` が違うのに `registry_website` / `url_note` が無いと、`npm run validate` が落ちる
 
 ### 小さく始めてから広げる
 
@@ -136,11 +136,13 @@ npm run fingerprint -- --pref saitama --handles hanno,iruma,tokorozawa
 
 手順:
 
-1. **取得済みトップページのリンクから**探す。キャッシュ (`cache/pages/<hash>.json` の `body`) を読むなら追加の取得は要らない
+1. **トップページのリンクから辿れる範囲を基本とする。** 取得済みならキャッシュ (`cache/pages/<hash>.json` の `body`) を読む (追加の取得は要らない)。キャッシュが空なら Step 3 の取得でできる。**取得予算を先に決める** (例: 1 自治体あたり追加 3 リクエストまで)。**予算内で見つからなければ「未確認」として残し、「無い」と書かない。** 深追いしたくなったら、別の調査として予算を決め直す
 2. `assessments/<領域>.yaml` に配信元を書く。`url` は href を解決しただけでも書いてよいが、**未取得なら `form` に「未取得」と明記する**
 3. 領域は `schema/domains.yaml` の `id`。現在 `profile` を持つのは `schedule-events` (動的) と `gomi` (静的。本 repo では採点しない) だけ
-4. 「カレンダーでさがす」のように表記が曖昧で配信元を特定できない自治体は、**ファイルを置かない** (= 未調査。埼玉では 14 自治体)
+4. 「カレンダーでさがす」のように表記が曖昧で配信元を特定できない自治体は、**ファイルを置かない** (= 未調査。埼玉では 14 自治体)。予算を超えて追いかけない
 5. 非 lg.jp の配信元 (図書館・観光協会・商工会議所) は**まだ誰も着手していない**。見つけたら `entity_type` を付けて足す。共有する配信元 (広域連合など) は `shared_with` に全 handle を書く
+
+**配信元 id は `<handle>/<publisher-slug>`。** slug は貢献者が決めるが、条件は 2 つ: **安定していること** (後から変えると UID が変わる)、**実体が分かること**。例: `hanno/city-site` (自治体サイト)、`hanno/lib-main` (図書館)、`hanno/cci-event` (商工会議所のイベント)、`hanno/tourism-news` (観光協会のお知らせ)。主体の種類は slug ではなく `entity_type` で区別する。
 
 雛形 (最小):
 
@@ -191,13 +193,10 @@ npm run apply-profile -- --pref saitama
 ## Step 7. 検査する — そしてゲートが落ちることを確かめる
 
 ```
-npm run validate -- --registry ../city-tecoli-data/municipalities/municipalities.yaml
+npm run validate
 ```
 
-**`--registry` を必ず付ける。** 付けないと次の 2 つが検査されない (実際に確認済み: 壊した `url` で、付けると失敗し、付けないと `OK`):
-
-- handle がレジストリに存在するか
-- `web.yaml` の `url` がレジストリの `website` と整合するか (違うなら `registry_website` + `url_note`)
+レジストリ照合は既定で有効。次を検査する: **handle がレジストリに存在するか** (綴り違い — `ogose` と `ogose-town` — はここで落ちる)、**`web.yaml` の `url` がレジストリの `website` と整合するか** (違うなら `registry_website` + `url_note`)。**レジストリが見つからなければ落ちる** (黙ってスキップしない)。出力の末尾に `レジストリ照合あり: <path>` が出ていることを確かめる。
 
 ### 「検査を書いた」と「検査が走っている」は別
 
@@ -212,7 +211,7 @@ npm run validate -- --registry ../city-tecoli-data/municipalities/municipalities
 ```
 cp municipalities/<県>/<h>/web.yaml /tmp/web.bak     # 退避
 # 壊す (例: url を別の値に、family_confidence を手で書き換える 等)
-npm run validate -- --registry ../city-tecoli-data/municipalities/municipalities.yaml   # → 失敗するはず
+npm run validate        # → 失敗するはず (npm test も落ちる)
 cp /tmp/web.bak municipalities/<県>/<h>/web.yaml     # 戻す
 git status --short                                    # 差分が残っていないこと
 ```
@@ -238,12 +237,13 @@ git add municipalities/<県>/<handle> && git commit
 | レジストリの `website` が古い | レジストリを直さず `url` + `registry_website` + `url_note` を `web.yaml` に |
 | いきなり大量に流す | 3〜4 件で止めて確認 (§Step 3) |
 | 判定が全件当たる / 全件外れる | 陰性対照を置いて判定の故障を見分ける |
+| 配信元を深追いする | 予算を先に決め、超えたら「未確認」で残す |
 | 素の `fetch` / `curl` で調査対象に触る | `politeFetch` 経由のみ |
 | 案内ページ 1 枚で「無い」と書く | `standard_od` を書かず未確認のまま |
 | 推定を観測として書く | `method` と `conditional_get_scope` で区別、推定は `notes` に根拠 |
 | 502 を「配信元の継続性 0」と読ませる | 何を測ったかを狭く書く (エンドポイント 1 つ) |
 | トップページの条件付き GET を F の実測にする | 配信元 URL そのものを取得して `scope: source` |
-| `validate` を引数なしで実行して OK と信じる | `--registry` 付きで実行 |
+| `validate` の「OK」を信じる | 末尾に `レジストリ照合あり` が出ていること。壊したデータで落ちることを確認 |
 | 検査を足して満足する | 壊したデータでゲートが落ちることを確認 |
 | 生成値 (`axes` / `family_confidence` / 生成 `notes`) を手で書く | `apply-profile` / 指紋採取に任せる |
 

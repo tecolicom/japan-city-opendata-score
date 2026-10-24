@@ -231,7 +231,7 @@ const runValidate = (files) => {
     mkdirSync(dirname(join(tmp, rel)), { recursive: true });
     writeFileSync(join(tmp, rel), body);
   }
-  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [join(root, 'scripts', 'validate.mjs'), '--root', tmp, '--no-registry'], { encoding: 'utf8' });
   return { code: r.status, out: r.stderr + r.stdout };
 };
 const good = {

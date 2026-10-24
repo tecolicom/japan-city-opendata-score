@@ -11,12 +11,17 @@ import { loadYaml, loadRegistry, listMunicipalityDirs } from './_lib/lib.mjs';
 import { familySemanticErrors, webSemanticErrors, webUrlErrors, representativeDivergenceErrors } from './_lib/family-check.mjs';
 import { assessmentSemanticErrors } from './_lib/assessment-check.mjs';
 import { checkProfile, profileBasisErrors } from './score.mjs';
+import { DEFAULT_REGISTRY } from './_lib/municipality.mjs';
 
 // --root <dir>: 検証対象のリポジトリルート (既定はこのスクリプトの親)。テストが壊したデータで落ちることを確かめるのに使う。
-// --registry <municipalities.yaml>: 指定されたら handle の実在も検査する (自前で採番しない)。
+// レジストリ (municipalities.yaml) は**必須**。handle の実在と web.yaml の url 照合に使う (自前で採番しない)。
+//   解決順: --registry <path> > 環境変数 REGISTRY_PATH > 隣の ../city-tecoli-data/municipalities/municipalities.yaml
+//   見つからなければ**失敗する** (黙ってスキップしない。過去に検査が効いていなかった型の失敗を繰り返さない)。
+//   --no-registry は照合を明示的に切る (テストが一時 root で走らせる用。実データには使わない)。
 const argOf = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 const root = argOf('--root') ?? join(dirname(fileURLToPath(import.meta.url)), '..');
-const registryPath = argOf('--registry');
+const noRegistry = process.argv.includes('--no-registry');
+const registryPath = noRegistry ? null : (argOf('--registry') ?? process.env.REGISTRY_PATH ?? DEFAULT_REGISTRY);
 const schemaDir = join(root, 'schema');
 const familiesDir = join(root, 'families');
 
@@ -79,7 +84,7 @@ function checkMunicipalities() {
     ? listFiles(familiesDir).filter((n) => /\.ya?ml$/i.test(n)).map((n) => loadYaml(join(familiesDir, n))).map((f) => [f.id, f])
     : []);
   const profiles = loadProfilesMap();
-  const registry = registryPath ? loadRegistry(registryPath) : null;
+  const registry = registryPath && existsSync(registryPath) ? loadRegistry(registryPath) : null; // 無い場合は下で明示的に失敗させる
   const yamlName = (n) => /\.ya?ml$/i.test(n);
   const known = new Set(listMunicipalityDirs(root).map((m) => `${m.pref}/${m.handle}`));
   for (const pref of listFiles(muniDir)) {
@@ -188,6 +193,9 @@ const validators = {
 };
 
 const errors = [];
+if (registryPath && !existsSync(registryPath)) {
+  errors.push(`レジストリが無い: ${registryPath} (handle の実在と URL の照合ができない。--registry か環境変数 REGISTRY_PATH で指定する。city-tecoli-data を隣にクローンする)`);
+}
 if (!existsSync(schemaDir)) {
   errors.push('schema/: 見つからない');
 } else {
@@ -212,4 +220,4 @@ if (errors.length > 0) {
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
 }
-console.log(`validate: OK (${Object.keys(validators).join(', ')})`);
+console.log(`validate: OK (${Object.keys(validators).join(', ')}) ${registryPath ? `レジストリ照合あり: ${registryPath}` : 'レジストリ照合なし (--no-registry)'}`);

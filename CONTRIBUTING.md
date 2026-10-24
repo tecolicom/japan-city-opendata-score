@@ -29,15 +29,15 @@ make help     # コマンド一覧
 ## 自分の町を足す
 
 1. [`docs/playbook.md`](docs/playbook.md) を読む。**手順・判断の基準・実際に踏んだ失敗**が書いてあります
-2. 手順に沿って進める (レジストリで handle を引く → 足場 → 指紋 → 配信元の洗い出し → 記録 → 検査)
+2. 手順に沿って進める (足場は `make new HANDLE=<handle>`) (レジストリで handle を引く → 足場 → 指紋 → 配信元の洗い出し → 記録 → 検査)
 3. 通すゲート:
 
 ```bash
-npm run validate -- --registry ../city-tecoli-data/municipalities/municipalities.yaml
+npm run validate
 npm test
 ```
 
-**`validate` には `--registry` を付けてください。** 付けないと、handle の実在と、公式サイト URL のレジストリとの整合が検査されません (CI は付けていないため、手元で付けて確かめる必要があります)。
+`validate` はレジストリ (隣の `../city-tecoli-data/`、別の場所なら環境変数 `REGISTRY_PATH`) を必須とし、handle の実在と公式サイト URL の整合を検査します。レジストリが無ければ落ちます。CI も同じ検査をします。
 
 エージェントに任せるなら [`AGENTS.md`](AGENTS.md) を読ませてください。
 

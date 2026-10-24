@@ -5,8 +5,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # handle の実在と URL の照合に使うレジストリ。無いと validate は落ちる (黙ってスキップしない)。
+      - uses: actions/checkout@v7
+        with:
+          repository: tecolicom/city-tecoli-data
+          path: city-tecoli-data
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - run: npm ci --no-audit --no-fund
       - run: npm test
+        env:
+          REGISTRY_PATH: city-tecoli-data/municipalities/municipalities.yaml
